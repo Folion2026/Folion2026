@@ -4,6 +4,14 @@ export interface Story{brief:string;challenge:string;response:string;outcome:str
 export interface ProjectReflection{successFactors:string;uniqueness:string;designChallenge:string;planningChallenge:string;innovation:string;lessonsLearned:string;reusableKnowledge:string}
 export type AssetType='hero'|'report'|'plan'|'section'|'diagram'|'render'|'photo'|'document'|'other'
 export interface Asset{id:string;type:AssetType;title:string;caption:string;url:string;sourcePage:number|null;tags:string[];uploadedCategory:string;isPrimary:boolean;isSelectedForGallery:boolean}
-export interface Project{id:string;projectName:string;visibility:Visibility;status:string;company:string;location:string;sector:string;year:string;client:string;siteArea:string;gfa:string;height:string;services:string[];team:TeamMember[];story:Story;reflection?:ProjectReflection;assets:Asset[];tags:string[];coverImage:string}
+export interface KnowledgeItem{title:string;description:string}
+export interface ProjectIdentity{name:string;location:string;status:string;practice:string;collaborators:string[];role:string[];description:string}
+export interface ProjectMetrics{siteArea:string;fsr:string;height:string;publicDomain:string;publicDomainPercentage:string;affordableHousing:string;gfa:string;dwellings:string}
+export interface ProjectOutcome{summary:string;benefits:string[]}
+export interface PlaceFramework{name:string;elements:string[]}
+export interface StudioAssets{shortSummary:string;capabilityStatement:string;tenderParagraph:string}
+export interface SearchIntelligence{keywords:string[];concepts:string[];searchQuestionsThisProjectShouldAnswer:string[]}
+export interface Evidence{field:string;source:string;page:number|null;confidence:number|null}
+export interface Project{id:string;projectName:string;visibility:Visibility;status:string;company:string;location:string;address?:string[];sector:string;projectType?:string[];year:string;client:string;siteArea:string;gfa:string;height:string;identity?:ProjectIdentity;metrics?:ProjectMetrics;opportunity?:KnowledgeItem[];challenges?:KnowledgeItem[];designResponse?:KnowledgeItem[];outcome?:ProjectOutcome;whyItMatters?:string;lessonsLearned?:string[];placeFramework?:PlaceFramework;studioAssets?:StudioAssets;searchIntelligence?:SearchIntelligence;evidence?:Evidence[];services:string[];team:TeamMember[];story:Story;reflection?:ProjectReflection;assets:Asset[];tags:string[];coverImage:string}
 export interface Collection{id:string;name:string;description:string;projectIds:string[]}
 export interface Person{id:string;name:string;position:string;office:string;email:string;bio:string;skills:string[]}

@@ -1,6 +1,97 @@
 [
-  {"id":"harbour-house","projectName":"Harbour House","visibility":"public","status":"Completed","company":"Fieldwork Studio","location":"Sydney, Australia","sector":"Residential","year":"2025","client":"Private client","siteArea":"640 m²","gfa":"410 m²","height":"2 storeys","services":["Architecture","Interior Design"],"team":[{"personId":"maya-chen","name":"Maya Chen","projectRole":"Design Director"},{"personId":"eli-wright","name":"Eli Wright","projectRole":"Project Architect"}],"story":{"brief":"A durable family home that could hold both solitude and celebration.","challenge":"A steep sandstone site faced strong coastal weather and overlooked neighbouring gardens.","response":"Three offset masonry volumes frame sheltered courtyards while opening long views to the harbour.","outcome":"The house feels generous without excess, with rooms that change character throughout the day.","lessons":"Early landscape collaboration made privacy an architectural asset rather than a constraint."},"assets":[],"tags":["coastal","adaptive living","masonry","award"],"coverImage":"https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1600&q=85"},
-  {"id":"assembly-yard","projectName":"Assembly Yard","visibility":"public","status":"Completed","company":"Fieldwork Studio","location":"Melbourne, Australia","sector":"Workplace","year":"2024","client":"North & Co.","siteArea":"2,100 m²","gfa":"4,800 m²","height":"4 storeys","services":["Architecture","Workplace Strategy","Heritage"],"team":[{"personId":"jonah-bell","name":"Jonah Bell","projectRole":"Principal"},{"personId":"maya-chen","name":"Maya Chen","projectRole":"Design Director"}],"story":{"brief":"Turn a former tool factory into a sociable home for a growing creative business.","challenge":"The deep plan and heritage fabric offered character but very little daylight.","response":"A new internal street and planted lightwells connect old brick workshops with lightweight timber insertions.","outcome":"A flexible workplace that feels more like a neighbourhood than an office.","lessons":"Temporary occupation revealed where informal collaboration naturally wanted to happen."},"assets":[],"tags":["adaptive reuse","heritage","timber","workplace"],"coverImage":"https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1600&q=85"},
-  {"id":"river-learning-hub","projectName":"River Learning Hub","visibility":"public","status":"In delivery","company":"Fieldwork Studio","location":"Brisbane, Australia","sector":"Education","year":"2026","client":"Marra College","siteArea":"5,400 m²","gfa":"3,250 m²","height":"3 storeys","services":["Architecture","Masterplanning","Community Engagement"],"team":[{"personId":"maya-chen","name":"Maya Chen","projectRole":"Design Lead"},{"personId":"sana-patel","name":"Sana Patel","projectRole":"Architect"}],"story":{"brief":"Create an open learning environment rooted in subtropical landscape.","challenge":"The campus needed to remain operational through staged construction and seasonal flooding.","response":"Elevated learning pavilions gather around a shaded civic verandah above a water-sensitive landscape.","outcome":"A resilient new heart for the campus, currently in delivery.","lessons":"Student workshops shifted the brief from corridors toward shared outdoor rooms."},"assets":[],"tags":["education","subtropical","community","resilience"],"coverImage":"https://images.unsplash.com/photo-1564981797816-1043664bf78d?auto=format&fit=crop&w=1600&q=85"},
-  {"id":"mallee-retreat","projectName":"Mallee Retreat","visibility":"private","status":"Concept","company":"Fieldwork Studio","location":"Mildura, Australia","sector":"Hospitality","year":"2026","client":"Confidential","siteArea":"18 ha","gfa":"1,100 m²","height":"1 storey","services":["Architecture","Landscape Strategy"],"team":[{"personId":"eli-wright","name":"Eli Wright","projectRole":"Project Lead"}],"story":{"brief":"A small retreat that heightens awareness of a fragile inland landscape.","challenge":"Extreme heat, scarce water and a deliberately light-touch operating model.","response":"Compact rammed-earth rooms cluster beneath a single deep shade canopy.","outcome":"Concept design in client review.","lessons":"Pending."},"assets":[],"tags":["hospitality","rammed earth","regional","confidential"],"coverImage":"https://images.unsplash.com/photo-1601918774946-25832a4be0d6?auto=format&fit=crop&w=1600&q=85"}
+  {
+    "id": "taverners-hill-makers-district",
+    "projectName": "Taverners Hill Makers District",
+    "visibility": "public",
+    "status": "Planning Proposal - Final",
+    "company": "Hatch",
+    "location": "Leichhardt, NSW, Australia",
+    "address": ["657-673 Parramatta Road", "675 Parramatta Road", "683-687 Parramatta Road", "2 George Street", "7 Tebbutt Street"],
+    "sector": "Mixed Use",
+    "projectType": ["Urban Design", "Planning Proposal", "Place Strategy", "Mixed-use redevelopment"],
+    "year": "2026",
+    "client": "To be confirmed",
+    "coverImage": "/projects/taverners-hill/cover.png",
+    "identity": {
+      "name": "Taverners Hill Makers District",
+      "location": "Leichhardt, NSW, Australia",
+      "status": "Planning Proposal - Final",
+      "practice": "Hatch",
+      "collaborators": ["PTW Architects", "Willowtree Planning"],
+      "role": ["Urban design analysis", "Strategic positioning", "Place analysis", "Urban design principles", "Planning proposal support"],
+      "description": "A mixed-use redevelopment proposal along Parramatta Road that repositions a traditional industrial strip into a creative production and makers precinct."
+    },
+    "metrics": {
+      "siteArea": "6,851 sqm",
+      "fsr": "6.5:1",
+      "height": "21 storeys, part 26 and part 27 storeys",
+      "publicDomain": "1,500 sqm",
+      "publicDomainPercentage": "21%",
+      "affordableHousing": "5%",
+      "gfa": "To be confirmed",
+      "dwellings": "To be confirmed"
+    },
+    "opportunity": [
+      {"title": "Strategic Parramatta Road location", "description": "The site sits within the Parramatta Road corridor between Taverners Hill Light Rail Station, Lewisham Train Station and Norton Street, positioning it within a major urban renewal context."},
+      {"title": "Large industrial landholding", "description": "The site provides a rare large-scale landholding within a constrained Inner West precinct, creating an opportunity for density, employment evolution and public domain improvement."},
+      {"title": "Creative ecosystem extension", "description": "The project offers an opportunity to extend the Inner West creative ecosystem eastward through artisan studios, galleries, cultural spaces and creative industry tenancies."}
+    ],
+    "challenges": [
+      {"title": "Employment land transition", "description": "The project needed to support housing growth while retaining the employment character of the land and avoiding a generic residential redevelopment outcome."},
+      {"title": "Parramatta Road renewal", "description": "The proposal needed to contribute positively to Parramatta Road through activation, connectivity, walkability and improved public domain."},
+      {"title": "Human scale within high density", "description": "The proposal needed to introduce substantial height and density while maintaining a human-scaled ground plane and local Inner West character."}
+    ],
+    "designResponse": [
+      {"title": "Creative makers district", "description": "The proposal reframes the site from a traditional industrial strip into a creative production hub where art, design, craftsmanship and cultural enterprise can thrive."},
+      {"title": "Public domain network", "description": "The proposal introduces a laneway network, footpath widening and a public plaza to improve permeability and create new public benefit."},
+      {"title": "Mixed-use employment model", "description": "Retail, food, commercial and creative industry tenancies are combined with residential density to preserve employment character while supporting housing growth."},
+      {"title": "Green urbanity", "description": "The project leverages proximity to the GreenWay and surrounding open spaces to support liveability, walkability and higher density living near green infrastructure."}
+    ],
+    "outcome": {
+      "summary": "The report concludes that the proposal has significant urban design merit and recommends that it be supported.",
+      "benefits": ["Improved Parramatta Road activation", "Enhanced walkability and connectivity", "New public domain and plaza spaces", "Retention and evolution of employment character", "Support for creative industry and makers uses", "Contribution to Inner West housing and renewal objectives"]
+    },
+    "whyItMatters": "This project demonstrates Hatch's ability to reposition industrial land into a high-density mixed-use precinct while retaining employment character, supporting creative industries and improving public domain outcomes along a major urban corridor.",
+    "lessonsLearned": [
+      "Large inner-city industrial sites near transit can support higher density renewal without abandoning employment character.",
+      "A makers district narrative can make mixed-use density feel place-specific rather than generic.",
+      "Public domain improvements are central to making high-density corridor renewal acceptable and valuable."
+    ],
+    "placeFramework": {"name": "Seven Essential Elements of Great Places", "elements": ["Identity", "Equity", "Greenery", "Urbanity", "Mobility", "Wellness", "Resilience"]},
+    "studioAssets": {
+      "shortSummary": "Taverners Hill Makers District transforms a large Parramatta Road industrial site into a mixed-use creative production precinct, combining housing, employment, public domain and makers uses within a strategic Inner West renewal corridor.",
+      "capabilityStatement": "Hatch provided urban design analysis, strategic positioning and place-based design principles for Taverners Hill Makers District, a planning proposal that repositions industrial land into a high-density mixed-use creative precinct while retaining employment character and improving public domain outcomes.",
+      "tenderParagraph": "This project demonstrates experience in complex urban renewal, employment land transition, transit-oriented density, place strategy and public domain-led planning proposals."
+    },
+    "searchIntelligence": {
+      "keywords": ["mixed use", "urban design", "planning proposal", "Parramatta Road", "Leichhardt", "Inner West", "creative industries", "makers district", "employment land", "housing", "public domain", "laneways", "activation", "walkability", "GreenWay", "transit-oriented development", "place strategy", "high density", "affordable housing"],
+      "concepts": ["employment land evolution", "creative production precinct", "corridor renewal", "green urbanity", "human-scaled density", "public benefit", "Inner West character"],
+      "searchQuestionsThisProjectShouldAnswer": ["Show me projects about employment land transition.", "Find mixed-use projects along major corridors.", "Find projects where public domain helped justify density.", "Show projects involving creative industries or makers precincts.", "Find projects connected to the Parramatta Road corridor."]
+    },
+    "evidence": [
+      {"field": "projectName", "source": "Planning Proposal cover page", "page": 1, "confidence": 1},
+      {"field": "address", "source": "Planning Proposal cover page and executive summary", "page": 1, "confidence": 1},
+      {"field": "siteArea", "source": "Executive summary", "page": 4, "confidence": 1},
+      {"field": "fsrHeightPublicBenefit", "source": "Project summary page", "page": 5, "confidence": 0.95},
+      {"field": "sevenElements", "source": "Our approach section", "page": 10, "confidence": 1}
+    ],
+    "assets": [
+      {"id": "taverners-cover", "type": "hero", "title": "Taverners Hill Makers District hero image", "caption": "Hero visual for the mixed-use creative production precinct.", "url": "/projects/taverners-hill/cover.png", "sourcePage": 1, "tags": ["hero", "render", "public domain"], "uploadedCategory": "Hero Image", "isPrimary": true, "isSelectedForGallery": true},
+      {"id": "taverners-context-map", "type": "diagram", "title": "Strategic context map", "caption": "Location within the Parramatta Road corridor and Inner West context.", "url": "/projects/taverners-hill/context-map.png", "sourcePage": 9, "tags": ["context", "Parramatta Road", "location"], "uploadedCategory": "Diagrams", "isPrimary": false, "isSelectedForGallery": true},
+      {"id": "taverners-masterplan", "type": "plan", "title": "Masterplan", "caption": "Proposed place structure and urban design arrangement.", "url": "/projects/taverners-hill/masterplan.png", "sourcePage": 46, "tags": ["masterplan", "urban design", "public domain"], "uploadedCategory": "Plans", "isPrimary": false, "isSelectedForGallery": true},
+      {"id": "taverners-section", "type": "section", "title": "Urban section", "caption": "Section illustrating built form, scale and mixed-use relationship.", "url": "/projects/taverners-hill/section.png", "sourcePage": 48, "tags": ["section", "height", "built form"], "uploadedCategory": "Sections", "isPrimary": false, "isSelectedForGallery": true},
+      {"id": "taverners-urban-design-moves", "type": "diagram", "title": "Urban design moves", "caption": "Key urban design moves including permeability, activation and public domain.", "url": "/projects/taverners-hill/urban-design-moves.png", "sourcePage": 50, "tags": ["urban design moves", "laneways", "activation"], "uploadedCategory": "Diagrams", "isPrimary": false, "isSelectedForGallery": true},
+      {"id": "taverners-report", "type": "report", "title": "Taverners Hill Makers District Planning Proposal", "caption": "Final planning proposal report.", "url": "/projects/taverners-hill/report.pdf", "sourcePage": null, "tags": ["report", "planning proposal"], "uploadedCategory": "Report", "isPrimary": true, "isSelectedForGallery": false}
+    ],
+    "services": ["Urban Design", "Strategic Vision", "Place Analysis", "Planning Proposal Support", "Public Domain Strategy"],
+    "team": [],
+    "tags": ["mixed use", "urban design", "planning proposal", "Parramatta Road", "Leichhardt", "Inner West", "creative industries", "makers district", "employment land", "housing", "public domain", "laneways", "activation", "walkability", "GreenWay", "transit-oriented development", "place strategy", "high density", "affordable housing"],
+    "story": {
+      "brief": "Provide urban design analysis, strategic positioning and design principles to support a mixed-use redevelopment and planning proposal for a large site along Parramatta Road in Leichhardt.",
+      "challenge": "The project needed to balance housing growth, employment land retention, industrial character, transport access, public domain improvement and Inner West local identity within a complex Parramatta Road corridor context.",
+      "response": "The proposal reframes the site from a traditional industrial strip into a creative production hub, combining housing, employment, retail, food, commercial and creative industry uses with new public domain, laneways, widened footpaths and public plazas.",
+      "outcome": "The report concludes that the proposal has significant urban design merit by enhancing activation, connectivity, walkability and mixed-use outcomes for Leichhardt.",
+      "lessons": "Large inner-city industrial sites near transit and green infrastructure can support higher density renewal while retaining employment character, creative production, public benefit and human-scaled public domain."
+    }
+  }
 ]

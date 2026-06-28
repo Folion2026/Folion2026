@@ -7,9 +7,9 @@ import ProjectCard from '../components/ProjectCard'
 import {FilterChips,SearchBar} from '../components/SearchAndFilters'
 import {useStore} from '../store'
 import {Button,EmptyState,Modal} from '../components/ui'
-import {EMPTY_STORY,normalizeProjects} from '../lib/project'
+import {normalizeProjects,projectSearchText} from '../lib/project'
 
-const exampleQueries=['adaptive reuse','subtropical education','coastal residential']
+const exampleQueries=['employment land transition','public domain and density','creative makers precinct']
 
 export default function Projects(){
   const {projects,collections,createCollection}=useStore()
@@ -23,7 +23,7 @@ export default function Projects(){
   const isExploring=Boolean(query.trim())||filter!=='All'
 
   const results=useMemo(()=>activeProjects.filter(project=>{
-    const searchable=[project.projectName,project.sector,project.location,project.company,project.client,project.status,project.tags||[],project.services||[],Object.values(project.story||EMPTY_STORY),Object.values(project.reflection||{})].flat().join(' ').toLowerCase()
+    const searchable=projectSearchText(project)
     const searchTerms=query.toLowerCase().trim().split(/\s+/).filter(Boolean)
     const matchesSearch=searchTerms.every(term=>searchable.includes(term))
     const matchesFilter=filter==='All'||(filter==='Public'&&project.visibility==='public')||(filter==='Private'&&project.visibility==='private')||project.sector===filter
@@ -35,7 +35,7 @@ export default function Projects(){
 
   return <div>
     <header className="projects-header">
-      <div><p className="eyebrow">Project memory</p><h1 className="page-title mt-2">Find what the practice knows.</h1><p className="projects-intro">Search the facts, stories, services and lessons inside every Fieldwork project.</p></div>
+      <div><p className="eyebrow">Project memory</p><h1 className="page-title mt-2">Find what the practice knows.</h1><p className="projects-intro">Search the facts, stories, services and lessons inside every project.</p></div>
       <Link to="/new-project"><Button><Plus size={17}/> New project</Button></Link>
     </header>
 

@@ -16,7 +16,7 @@ const nav=[
 ] as const
 
 const routeTitles:Record<string,{eyebrow:string;title:string}>={
-  '/home':{eyebrow:'Fieldwork Studio',title:'Home'},
+  '/home':{eyebrow:'Practice memory',title:'Home'},
   '/projects':{eyebrow:'Practice memory',title:'Projects'},
   '/new-project':{eyebrow:'Practice memory',title:'New project'},
   '/studio':{eyebrow:'Create from memory',title:'Studio'},
@@ -25,7 +25,9 @@ const routeTitles:Record<string,{eyebrow:string;title:string}>={
 
 export function Sidebar({open,onClose}:{open:boolean;onClose:()=>void}){
   const {collections,projects}=useStore()
-  const activeProjects=normalizeProjects(projects).filter(project=>project.status!=='Archived').length
+  const safeProjects=normalizeProjects(projects)
+  const activeProjects=safeProjects.filter(project=>project.status!=='Archived').length
+  const practiceName=safeProjects[0]?.company||'Your practice'
   return <>
     {open&&<button className="fixed inset-0 z-[35] bg-black/30 backdrop-blur-sm lg:hidden" aria-label="Close navigation" onClick={onClose}/>} 
     <aside className={`sidebar ${open?'translate-x-0':'-translate-x-full'} lg:translate-x-0`} aria-label="Practice navigation">
@@ -42,11 +44,11 @@ export function Sidebar({open,onClose}:{open:boolean;onClose:()=>void}){
           <p className="sidebar-label">Collections</p>
           <NavLink to="/projects" onClick={onClose} className="text-black/35 hover:text-ink" aria-label="View collections"><Plus size={15}/></NavLink>
         </div>
-        <div className="mt-2 space-y-0.5">{collections.slice(0,3).map(collection=><NavLink key={collection.id} to={`/collections/${collection.id}`} onClick={onClose} className={({isActive})=>`collection-link ${isActive?'active':''}`}><span className="h-2 w-2 rounded-sm bg-current opacity-45"/>{collection.name}<span className="ml-auto text-[11px] opacity-40">{collection.projectIds.length}</span></NavLink>)}</div>
+        <div className="mt-2 space-y-0.5">{collections.slice(0,3).map(collection=><NavLink key={collection.id} to={`/collections/${collection.id}`} onClick={onClose} className={({isActive})=>`collection-link ${isActive?'active':''}`}><span className="h-2 w-2 rounded-sm bg-current opacity-45"/>{collection.name}<span className="ml-auto text-[11px] opacity-40">{collection.projectIds.filter(id=>safeProjects.some(project=>project.id===id)).length}</span></NavLink>)}</div>
       </div>
       <div className="mt-auto">
         <div className="practice-switcher">
-          <div className="flex items-start justify-between gap-3"><div><div className="sidebar-label !text-white/45">Current practice</div><div className="mt-2 text-sm font-medium">Fieldwork Studio</div></div><div className="grid grid-cols-2 gap-0.5 mt-1">{['#ff6b57','#d6ff5c','#51a4ff','#cf88ff'].map(c=><i key={c} className="h-1.5 w-1.5" style={{background:c}}/>)}</div></div>
+          <div className="flex items-start justify-between gap-3"><div><div className="sidebar-label !text-white/45">Current practice</div><div className="mt-2 text-sm font-medium">{practiceName}</div></div><div className="grid grid-cols-2 gap-0.5 mt-1">{['#ff6b57','#d6ff5c','#51a4ff','#cf88ff'].map(c=><i key={c} className="h-1.5 w-1.5" style={{background:c}}/>)}</div></div>
           <div className="mt-4 pt-3 border-t border-white/10 text-xs text-white/50">{activeProjects} active projects · 4 people</div>
         </div>
         <div className="flex items-center gap-3 mt-4 px-1"><div className="avatar">MC</div><div className="text-sm"><div className="font-medium">Maya Chen</div><div className="text-black/45">Design Director</div></div></div>
@@ -57,7 +59,7 @@ export function Sidebar({open,onClose}:{open:boolean;onClose:()=>void}){
 
 export function TopBar({onMenu,onSearch}:{onMenu:()=>void;onSearch:()=>void}){
   const {pathname}=useLocation()
-  const meta=routeTitles[pathname]||(pathname.startsWith('/projects/')?{eyebrow:'Project memory',title:'Project detail'}:pathname.startsWith('/collections/')?{eyebrow:'Curated portfolio',title:'Collection'}:{eyebrow:'Fieldwork Studio',title:'Folion'})
+  const meta=routeTitles[pathname]||(pathname.startsWith('/projects/')?{eyebrow:'Project memory',title:'Project detail'}:pathname.startsWith('/collections/')?{eyebrow:'Curated portfolio',title:'Collection'}:{eyebrow:'Practice memory',title:'Folion'})
   useEffect(()=>{const onKey=(event:KeyboardEvent)=>{if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'){event.preventDefault();onSearch()}};window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey)},[onSearch])
   return <header className="topbar">
     <button onClick={onMenu} className="icon-btn !grid lg:!hidden" aria-label="Open navigation"><Menu size={19}/></button>
