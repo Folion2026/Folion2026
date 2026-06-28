@@ -1,3 +1,10 @@
 import {Search,SlidersHorizontal,X} from 'lucide-react'
-export function SearchBar({value,onChange}:{value:string;onChange:(s:string)=>void}){return <div className="searchbar"><Search size={20}/><input value={value} onChange={e=>onChange(e.target.value)} placeholder="Ask about a project, place, material or idea…"/>{value&&<button onClick={()=>onChange('')}><X size={17}/></button>}<span className="hidden md:flex ml-auto text-[11px] border border-black/10 rounded-md px-2 py-1">⌘ K</span></div>}
-export function FilterChips({active,onChange}:{active:string;onChange:(s:string)=>void}){const xs=['All','Public','Private','Residential','Workplace','Education','Hospitality'];return <div className="flex items-center gap-2 overflow-auto pb-1"><SlidersHorizontal size={16} className="shrink-0 mr-1"/>{xs.map(x=><button key={x} onClick={()=>onChange(x)} className={`chip ${active===x?'active':''}`}>{x}</button>)}</div>}
+
+export function SearchBar({value,onChange}:{value:string;onChange:(value:string)=>void}){
+  return <div className="searchbar"><Search size={20}/><input value={value} onChange={event=>onChange(event.target.value)} placeholder="Ask about a project, place, material or idea…" aria-label="Search project memory"/>{value&&<button onClick={()=>onChange('')} aria-label="Clear search"><X size={17}/></button>}<kbd className="hidden md:flex ml-auto">⌘ K</kbd></div>
+}
+
+export function FilterChips({active,onChange}:{active:string;onChange:(value:string)=>void}){
+  const filters=['All','Public','Private','Residential','Workplace','Education','Hospitality']
+  return <div className="filter-row"><SlidersHorizontal size={15}/>{filters.map(filter=><button key={filter} onClick={()=>onChange(filter)} className={`chip ${active===filter?'active':''}`} aria-pressed={active===filter}>{filter}</button>)}</div>
+}
