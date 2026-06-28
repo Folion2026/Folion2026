@@ -1,9 +1,10 @@
 import {useEffect,useState} from 'react'
-import {NavLink,Outlet,useLocation,useNavigate} from 'react-router-dom'
+import {NavLink,Outlet,useLocation} from 'react-router-dom'
 import {BookOpen,FolderKanban,Home,IdCard,Menu,Plus,Search,Sparkles,X} from 'lucide-react'
 import FolionLogo from './FolionLogo'
 import {Button} from './ui'
 import {useStore} from '../store'
+import CommandPalette from './CommandPalette'
 
 const nav=[
   ['/home','Home',Home],
@@ -53,16 +54,15 @@ export function Sidebar({open,onClose}:{open:boolean;onClose:()=>void}){
   </>
 }
 
-export function TopBar({onMenu}:{onMenu:()=>void}){
+export function TopBar({onMenu,onSearch}:{onMenu:()=>void;onSearch:()=>void}){
   const {pathname}=useLocation()
-  const navigate=useNavigate()
   const meta=routeTitles[pathname]||(pathname.startsWith('/projects/')?{eyebrow:'Project memory',title:'Project detail'}:pathname.startsWith('/collections/')?{eyebrow:'Curated portfolio',title:'Collection'}:{eyebrow:'Fieldwork Studio',title:'Folion'})
-  useEffect(()=>{const onKey=(event:KeyboardEvent)=>{if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'){event.preventDefault();navigate('/projects')}};window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey)},[navigate])
+  useEffect(()=>{const onKey=(event:KeyboardEvent)=>{if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'){event.preventDefault();onSearch()}};window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey)},[onSearch])
   return <header className="topbar">
     <button onClick={onMenu} className="icon-btn !grid lg:!hidden" aria-label="Open navigation"><Menu size={19}/></button>
     <div className="min-w-0"><div className="topbar-eyebrow">{meta.eyebrow}</div><div className="font-medium truncate">{meta.title}</div></div>
     <div className="ml-auto flex items-center gap-2">
-      <button onClick={()=>navigate('/projects')} className="global-search" aria-label="Search projects"><Search size={17}/><span className="hidden md:inline">Search memory</span><kbd className="hidden xl:inline">⌘ K</kbd></button>
+      <button onClick={onSearch} className="global-search" aria-label="Search and navigate"><Search size={17}/><span className="hidden md:inline">Search memory</span><kbd className="hidden xl:inline">⌘ K</kbd></button>
       <NavLink to="/new-project"><Button className="!px-4"><Plus size={17}/><span className="hidden sm:inline">New project</span></Button></NavLink>
     </div>
   </header>
@@ -70,7 +70,8 @@ export function TopBar({onMenu}:{onMenu:()=>void}){
 
 export function AppShell(){
   const [open,setOpen]=useState(false)
+  const [searchOpen,setSearchOpen]=useState(false)
   const {pathname}=useLocation()
   useEffect(()=>setOpen(false),[pathname])
-  return <div className="min-h-screen bg-paper text-ink"><Sidebar open={open} onClose={()=>setOpen(false)}/><div className="lg:pl-[248px]"><TopBar onMenu={()=>setOpen(true)}/><main className="page"><Outlet/></main></div></div>
+  return <div className="min-h-screen bg-paper text-ink"><Sidebar open={open} onClose={()=>setOpen(false)}/><div className="lg:pl-[248px]"><TopBar onMenu={()=>setOpen(true)} onSearch={()=>setSearchOpen(true)}/><main className="page"><Outlet/></main></div><CommandPalette open={searchOpen} onClose={()=>setSearchOpen(false)}/></div>
 }
