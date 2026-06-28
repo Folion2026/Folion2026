@@ -22,7 +22,7 @@ export default function Projects(){
   const isExploring=Boolean(query.trim())||filter!=='All'
 
   const results=useMemo(()=>activeProjects.filter(project=>{
-    const searchable=[project.projectName,project.sector,project.location,project.company,project.client,project.status,project.tags,project.services,Object.values(project.story)].flat().join(' ').toLowerCase()
+    const searchable=[project.projectName,project.sector,project.location,project.company,project.client,project.status,project.tags,project.services,Object.values(project.story),Object.values(project.reflection||{})].flat().join(' ').toLowerCase()
     const searchTerms=query.toLowerCase().trim().split(/\s+/).filter(Boolean)
     const matchesSearch=searchTerms.every(term=>searchable.includes(term))
     const matchesFilter=filter==='All'||(filter==='Public'&&project.visibility==='public')||(filter==='Private'&&project.visibility==='private')||project.sector===filter

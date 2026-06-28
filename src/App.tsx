@@ -5,10 +5,11 @@ import Landing from './pages/Landing'
 import Home from './pages/Home'
 import Projects from './pages/Projects'
 import ProjectDetail from './pages/ProjectDetail'
-import NewProject from './pages/NewProject'
+import NewProject from './pages/NewProjectEntry'
 import CollectionPage from './pages/Collection'
 import Studio from './pages/Studio'
 import CompanyProfile from './pages/CompanyProfile'
+import ProjectReflection from './pages/ProjectReflection'
 import Magazine from './pages/Magazine'
 import FolionId from './pages/FolionId'
-export default function App(){return <StoreProvider><BrowserRouter><Routes><Route path="/" element={<Landing/>}/><Route path="/magazine" element={<Magazine/>}/><Route path="/company/:id" element={<CompanyProfile/>}/><Route element={<AppShell/>}><Route path="/home" element={<Home/>}/><Route path="/projects" element={<Projects/>}/><Route path="/projects/:id" element={<ProjectDetail/>}/><Route path="/new-project" element={<NewProject/>}/><Route path="/collections/:id" element={<CollectionPage/>}/><Route path="/studio" element={<Studio/>}/><Route path="/folion-id" element={<FolionId/>}/></Route></Routes></BrowserRouter></StoreProvider>}
+export default function App(){return <StoreProvider><BrowserRouter><Routes><Route path="/" element={<Landing/>}/><Route path="/magazine" element={<Magazine/>}/><Route path="/company/:id" element={<CompanyProfile/>}/><Route element={<AppShell/>}><Route path="/home" element={<Home/>}/><Route path="/projects" element={<Projects/>}/><Route path="/projects/:id" element={<ProjectDetail/>}/><Route path="/new-project" element={<NewProject/>}/><Route path="/project-reflection" element={<ProjectReflection/>}/><Route path="/collections/:id" element={<CollectionPage/>}/><Route path="/studio" element={<Studio/>}/><Route path="/folion-id" element={<FolionId/>}/></Route></Routes></BrowserRouter></StoreProvider>}
