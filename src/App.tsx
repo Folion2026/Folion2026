@@ -8,5 +8,6 @@ import ProjectDetail from './pages/ProjectDetail'
 import NewProject from './pages/NewProject'
 import CollectionPage from './pages/Collection'
 import Studio from './pages/Studio'
-import {CompanyProfile,FolionId,Magazine} from './pages/IdentityAndPublic'
+import {CompanyProfile,Magazine} from './pages/IdentityAndPublic'
+import FolionId from './pages/FolionId'
 export default function App(){return <StoreProvider><BrowserRouter><Routes><Route path="/" element={<Landing/>}/><Route path="/magazine" element={<Magazine/>}/><Route path="/company/:id" element={<CompanyProfile/>}/><Route element={<AppShell/>}><Route path="/home" element={<Home/>}/><Route path="/projects" element={<Projects/>}/><Route path="/projects/:id" element={<ProjectDetail/>}/><Route path="/new-project" element={<NewProject/>}/><Route path="/collections/:id" element={<CollectionPage/>}/><Route path="/studio" element={<Studio/>}/><Route path="/folion-id" element={<FolionId/>}/></Route></Routes></BrowserRouter></StoreProvider>}
