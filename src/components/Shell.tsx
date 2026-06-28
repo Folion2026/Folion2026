@@ -5,6 +5,7 @@ import FolionLogo from './FolionLogo'
 import {Button} from './ui'
 import {useStore} from '../store'
 import CommandPalette from './CommandPalette'
+import {normalizeProjects} from '../lib/project'
 
 const nav=[
   ['/home','Home',Home],
@@ -24,7 +25,7 @@ const routeTitles:Record<string,{eyebrow:string;title:string}>={
 
 export function Sidebar({open,onClose}:{open:boolean;onClose:()=>void}){
   const {collections,projects}=useStore()
-  const activeProjects=projects.filter(project=>project.status!=='Archived').length
+  const activeProjects=normalizeProjects(projects).filter(project=>project.status!=='Archived').length
   return <>
     {open&&<button className="fixed inset-0 z-[35] bg-black/30 backdrop-blur-sm lg:hidden" aria-label="Close navigation" onClick={onClose}/>} 
     <aside className={`sidebar ${open?'translate-x-0':'-translate-x-full'} lg:translate-x-0`} aria-label="Practice navigation">

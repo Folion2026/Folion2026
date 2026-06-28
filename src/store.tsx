@@ -2,17 +2,18 @@ import {createContext,useContext,useMemo,useState,ReactNode} from 'react'
 import seedProjects from './data/projects.json'
 import seedCollections from './data/collections.json'
 import {Collection,Project,Visibility} from './types'
+import {normalizeProject,normalizeProjects} from './lib/project'
 
 type Store={projects:Project[];collections:Collection[];selected:string[];toggleSelected:(id:string)=>void;clearSelected:()=>void;addProject:(p:Project)=>void;updateProject:(p:Project)=>void;archiveSelected:()=>void;setSelectedVisibility:(v:Visibility)=>void;createCollection:(name:string)=>Collection;renameCollection:(id:string,name:string)=>void;toggleProjectInCollection:(cid:string,pid:string)=>void;addSelectedToCollection:(cid:string)=>void}
 const Ctx=createContext<Store|null>(null)
 export function StoreProvider({children}:{children:ReactNode}){
- const [projects,setProjects]=useState<Project[]>(seedProjects as Project[])
+ const [projects,setProjects]=useState<Project[]>(()=>normalizeProjects(seedProjects))
  const [collections,setCollections]=useState<Collection[]>(seedCollections as Collection[])
  const [selected,setSelected]=useState<string[]>([])
  const toggleSelected=(id:string)=>setSelected(s=>s.includes(id)?s.filter(x=>x!==id):[...s,id])
  const clearSelected=()=>setSelected([])
- const addProject=(p:Project)=>setProjects(x=>[p,...x])
- const updateProject=(p:Project)=>setProjects(x=>x.map(v=>v.id===p.id?p:v))
+ const addProject=(p:Project)=>setProjects(x=>{const safe=normalizeProject(p);return safe?[safe,...x]:x})
+ const updateProject=(p:Project)=>setProjects(x=>{const safe=normalizeProject(p);return safe?x.map(v=>v.id===safe.id?safe:v):x})
  const archiveSelected=()=>{setProjects(x=>x.map(p=>selected.includes(p.id)?{...p,status:'Archived'}:p));clearSelected()}
  const setSelectedVisibility=(visibility:Visibility)=>{setProjects(x=>x.map(p=>selected.includes(p.id)?{...p,visibility}:p));clearSelected()}
  const createCollection=(name:string)=>{const c={id:`collection-${Date.now()}`,name,description:'A curated project story.',projectIds:[]};setCollections(x=>[c,...x]);return c}

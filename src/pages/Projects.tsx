@@ -7,6 +7,7 @@ import ProjectCard from '../components/ProjectCard'
 import {FilterChips,SearchBar} from '../components/SearchAndFilters'
 import {useStore} from '../store'
 import {Button,EmptyState,Modal} from '../components/ui'
+import {EMPTY_STORY,normalizeProjects} from '../lib/project'
 
 const exampleQueries=['adaptive reuse','subtropical education','coastal residential']
 
@@ -16,13 +17,13 @@ export default function Projects(){
   const [filter,setFilter]=useState('All')
   const [collectionModal,setCollectionModal]=useState(false)
   const [collectionName,setCollectionName]=useState('')
-  const activeProjects=projects.filter(project=>project.status!=='Archived')
+  const activeProjects=normalizeProjects(projects).filter(project=>project.status!=='Archived')
   const publicCount=activeProjects.filter(project=>project.visibility==='public').length
   const privateCount=activeProjects.filter(project=>project.visibility==='private').length
   const isExploring=Boolean(query.trim())||filter!=='All'
 
   const results=useMemo(()=>activeProjects.filter(project=>{
-    const searchable=[project.projectName,project.sector,project.location,project.company,project.client,project.status,project.tags,project.services,Object.values(project.story),Object.values(project.reflection||{})].flat().join(' ').toLowerCase()
+    const searchable=[project.projectName,project.sector,project.location,project.company,project.client,project.status,project.tags||[],project.services||[],Object.values(project.story||EMPTY_STORY),Object.values(project.reflection||{})].flat().join(' ').toLowerCase()
     const searchTerms=query.toLowerCase().trim().split(/\s+/).filter(Boolean)
     const matchesSearch=searchTerms.every(term=>searchable.includes(term))
     const matchesFilter=filter==='All'||(filter==='Public'&&project.visibility==='public')||(filter==='Private'&&project.visibility==='private')||project.sector===filter

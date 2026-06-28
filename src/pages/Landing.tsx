@@ -4,6 +4,9 @@ import {Link} from 'react-router-dom'
 import FolionLogo from '../components/FolionLogo'
 import {Button} from '../components/ui'
 import projects from '../data/projects.json'
+import {FALLBACK_PROJECT_IMAGE,normalizeProject,normalizeProjects} from '../lib/project'
+
+const safeProjects=normalizeProjects(projects)
 
 const capabilities=[
   {icon:Search,title:'Find the thinking',body:'Search across projects, stories, sectors, materials and people in natural language.'},
@@ -21,9 +24,9 @@ const steps=[
 function SearchDemo(){
   const [active,setActive]=useState(0)
   const examples=[
-    {query:'subtropical education projects',result:projects[2]},
-    {query:'adaptive reuse and heritage',result:projects[1]},
-    {query:'coastal residential work',result:projects[0]},
+    {query:'subtropical education projects',result:safeProjects[2]||safeProjects[0]||normalizeProject({})!},
+    {query:'adaptive reuse and heritage',result:safeProjects[1]||safeProjects[0]||normalizeProject({})!},
+    {query:'coastal residential work',result:safeProjects[0]||normalizeProject({})!},
   ]
   const example=examples[active]
   return <div className="memory-demo">
@@ -33,8 +36,8 @@ function SearchDemo(){
       <div className="memory-query"><Search size={19}/><span>{example.query}</span><kbd>↵</kbd></div>
       <div className="flex flex-wrap gap-2 mt-3">{examples.map((item,index)=><button key={item.query} onClick={()=>setActive(index)} className={`demo-query-chip ${active===index?'active':''}`}>{item.query}</button>)}</div>
       <div className="memory-result">
-        <img src={example.result.coverImage} alt=""/>
-        <div className="flex-1 min-w-0"><span className="text-[10px] uppercase tracking-wider text-black/35">Best project match</span><h3>{example.result.projectName}</h3><p>{example.result.sector} · {example.result.location} · {example.result.year}</p><div className="mt-4 flex flex-wrap gap-1.5">{example.result.tags.slice(0,3).map(tag=><span key={tag}>{tag}</span>)}</div></div>
+        <img src={example.result?.coverImage||FALLBACK_PROJECT_IMAGE} onError={event=>{event.currentTarget.src=FALLBACK_PROJECT_IMAGE}} alt=""/>
+        <div className="flex-1 min-w-0"><span className="text-[10px] uppercase tracking-wider text-black/35">Best project match</span><h3>{example.result?.projectName||'Project unavailable'}</h3><p>{example.result?.sector||'Uncategorised'} · {example.result?.location||'Location not recorded'} · {example.result?.year||'—'}</p><div className="mt-4 flex flex-wrap gap-1.5">{(example.result?.tags||[]).slice(0,3).map(tag=><span key={tag}>{tag}</span>)}</div></div>
         <ArrowUpRight className="shrink-0" size={19}/>
       </div>
     </div>
@@ -42,7 +45,7 @@ function SearchDemo(){
 }
 
 export default function Landing(){
-  const featured=projects[0]
+  const featured=safeProjects[0]||normalizeProject({})!
   return <div className="landing">
     <header className="landing-nav">
       <FolionLogo/>
@@ -72,8 +75,8 @@ export default function Landing(){
       <section className="demo-section"><div className="demo-copy"><p className="eyebrow text-white/50">Ask Folion</p><h2>Find the precedent hiding in plain sight.</h2><p>Search facts and project stories together. A place, material, lesson or half-remembered idea can become the beginning of the right shortlist.</p><ul><li><Check/>Natural-language-style search</li><li><Check/>Results grounded in your project JSON</li><li><Check/>No scores, black boxes or dashboard theatre</li></ul></div><SearchDemo/></section>
 
       <section id="project-memory" className="project-memory-feature">
-        <div className="project-feature-image"><img src={featured.coverImage} alt={`${featured.projectName}, ${featured.location}`}/><span className="image-overlay"/><div className="project-feature-label"><span>Project memory 01</span><strong>{featured.projectName}</strong></div></div>
-        <div className="project-feature-copy"><p className="eyebrow">Not just what you made</p><h2>Remember why it mattered.</h2><p>{featured.story.brief}</p><blockquote>“{featured.story.lessons}”</blockquote><div className="project-fact-row"><span><small>Place</small>{featured.location}</span><span><small>Sector</small>{featured.sector}</span><span><small>Year</small>{featured.year}</span></div><Link to={`/projects/${featured.id}`} className="inline-flex items-center gap-2 text-sm font-medium mt-9 border-b border-black pb-1">Open the full story <ArrowUpRight size={16}/></Link></div>
+        <div className="project-feature-image"><img src={featured?.coverImage||FALLBACK_PROJECT_IMAGE} onError={event=>{event.currentTarget.src=FALLBACK_PROJECT_IMAGE}} alt={`${featured?.projectName||'Project'}, ${featured?.location||''}`}/><span className="image-overlay"/><div className="project-feature-label"><span>Project memory 01</span><strong>{featured?.projectName||'Project unavailable'}</strong></div></div>
+        <div className="project-feature-copy"><p className="eyebrow">Not just what you made</p><h2>Remember why it mattered.</h2><p>{featured?.story?.brief||'Project story not recorded yet.'}</p><blockquote>“{featured?.story?.lessons||'Lessons are still being captured.'}”</blockquote><div className="project-fact-row"><span><small>Place</small>{featured?.location||'—'}</span><span><small>Sector</small>{featured?.sector||'—'}</span><span><small>Year</small>{featured?.year||'—'}</span></div>{featured?.id&&<Link to={`/projects/${featured.id}`} className="inline-flex items-center gap-2 text-sm font-medium mt-9 border-b border-black pb-1">Open the full story <ArrowUpRight size={16}/></Link>}</div>
       </section>
 
       <section className="landing-section"><div className="flex flex-col md:flex-row justify-between md:items-end gap-6"><div><p className="eyebrow">A simple rhythm</p><h2 className="landing-h2 max-w-2xl">Capture. Find. Reuse.</h2></div><Link to="/projects"><Button variant="ghost">Explore projects <ArrowRight size={16}/></Button></Link></div><div className="steps-grid">{steps.map(step=><article key={step.number}><span>{step.number}</span><h3>{step.title}</h3><p>{step.body}</p></article>)}</div></section>
