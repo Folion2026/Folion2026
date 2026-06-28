@@ -1,3 +1,12 @@
-import {AlertCircle,Clock3} from 'lucide-react'
+import {AlertCircle,ArrowUpRight,Clock3} from 'lucide-react'
+import {Link} from 'react-router-dom'
 import activities from '../data/activities.json'
-export default function RightActivityPanel(){const attention=activities.find(a=>a.type==='attention');return <aside className="space-y-8"><section><h3 className="eyebrow flex items-center gap-2"><AlertCircle size={14}/> Required attention</h3><div className="mt-3 bg-[#fff1d8] rounded-2xl p-5"><div className="font-medium">{attention?.title}</div><p className="text-sm text-black/55 mt-2 leading-relaxed">{attention?.detail}</p><button className="text-sm underline mt-4">Review project</button></div></section><section><h3 className="eyebrow flex items-center gap-2"><Clock3 size={14}/> Recent activity</h3><div className="mt-3 divide-y divide-black/10">{activities.filter(a=>a.type!=='attention').map(a=><div key={a.id} className="py-4"><div className="text-sm font-medium">{a.title}</div><p className="text-xs text-black/45 mt-1">{a.detail}</p><p className="text-[11px] text-black/30 mt-2">{a.time}</p></div>)}</div></section></aside>}
+
+export default function RightActivityPanel(){
+  const attention=activities.find(activity=>activity.type==='attention')
+  const recent=activities.filter(activity=>activity.type!=='attention')
+  return <aside className="activity-panel">
+    <section><h3 className="activity-title"><AlertCircle size={14}/> Required attention</h3><Link to="/projects/mallee-retreat" className="attention-card"><span className="attention-dot"/><div><strong>{attention?.title}</strong><p>{attention?.detail}</p><span className="attention-action">Review project <ArrowUpRight size={13}/></span></div></Link></section>
+    <section><h3 className="activity-title"><Clock3 size={14}/> Recent activity</h3><div className="activity-list">{recent.map(activity=><div key={activity.id} className="activity-item"><span className={`activity-marker ${activity.type}`}/><div><strong>{activity.title}</strong><p>{activity.detail}</p><time>{activity.time}</time></div></div>)}</div></section>
+  </aside>
+}
