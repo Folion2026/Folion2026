@@ -1,0 +1,2 @@
+import {Link} from 'react-router-dom'
+export default function FolionLogo({light=false}:{light?:boolean}){return <Link to="/home" className={`inline-flex items-center gap-3 font-semibold text-xl tracking-tight ${light?'text-white':'text-ink'}`}><span className="grid grid-cols-2 gap-[2px] w-[17px] h-[17px]"><i className="bg-[#ff6b57]"/><i className="bg-[#d6ff5c]"/><i className="bg-[#51a4ff]"/><i className="bg-[#cf88ff]"/></span>Folion</Link>}

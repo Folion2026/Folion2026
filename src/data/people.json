@@ -1,0 +1,6 @@
+[
+ {"id":"maya-chen","name":"Maya Chen","position":"Design Director","office":"Sydney","email":"maya@fieldwork.studio","bio":"Maya leads civic, education and residential work with a focus on social landscapes.","skills":["Design leadership","Education","Housing"]},
+ {"id":"jonah-bell","name":"Jonah Bell","position":"Principal","office":"Melbourne","email":"jonah@fieldwork.studio","bio":"Jonah works at the intersection of heritage, workplace and adaptive reuse.","skills":["Strategy","Heritage","Workplace"]},
+ {"id":"eli-wright","name":"Eli Wright","position":"Associate","office":"Sydney","email":"eli@fieldwork.studio","bio":"Eli is interested in material economy and regional practice.","skills":["Delivery","Residential","Materials"]},
+ {"id":"sana-patel","name":"Sana Patel","position":"Architect","office":"Brisbane","email":"sana@fieldwork.studio","bio":"Sana brings research and community engagement into the design process.","skills":["Engagement","Research","Visualisation"]}
+]
