@@ -122,12 +122,17 @@ function normalizeProjectKnowledge(project:Record<string,unknown>,metrics:Projec
  return{facts,teamInput,draft}
 }
 
-export function projectKnowledgeStatus(project:Project){
+export function isKnowledgeReviewResolved(project:Project){
  const knowledge=project.knowledge
- if(!knowledge)return'Review needed' as const
+ if(!knowledge)return false
+ const hasSelectedKnowledge=knowledge.facts.some(fact=>Boolean(fact.value)||fact.status==='rejected')||knowledge.draft.some(section=>Boolean(section.value))
  const unresolvedFact=knowledge.facts.some(fact=>Boolean(fact.value)&&!['reviewed','rejected'].includes(fact.status))
  const unresolvedDraft=knowledge.draft.some(section=>Boolean(section.value)&&!section.approved)
- return unresolvedFact||unresolvedDraft?'Review needed' as const:'Ready for Studio' as const
+ return hasSelectedKnowledge&&!unresolvedFact&&!unresolvedDraft
+}
+
+export function projectKnowledgeStatus(project:Project){
+ return project.knowledgeStatus==='Ready for Studio'&&isKnowledgeReviewResolved(project)?'Ready for Studio' as const:'Review needed' as const
 }
 
 export function reviewedKnowledgeFacts(project:Project){return(project.knowledge?.facts||[]).filter(fact=>fact.status==='reviewed'&&Boolean(fact.value))}
@@ -152,7 +157,7 @@ export function normalizeProject(value:unknown):Project|null{
  const studioAssets=normalizeStudioAssets(project.studioAssets);const normalizedEvidence=normalizeEvidence(project.evidence);const whyItMatters=text(project.whyItMatters)
  const projectName=text(project.projectName,identity.name)
  const knowledge=normalizeProjectKnowledge(project,metrics,story,studioAssets,whyItMatters,assets,normalizedEvidence)
- return{id:text(project.id,`project-${slug(projectName)}`),projectName,visibility:project.visibility==='private'?'private':'public',status:text(project.status,identity.status),company:text(project.company,identity.practice),location:text(project.location,identity.location),address:strings(project.address),sector:text(project.sector,'Uncategorised'),projectType:strings(project.projectType),proposal:text(project.proposal),precincts:strings(project.precincts),siteContext:strings(project.siteContext),placeStrategy:strings(project.placeStrategy),year:text(project.year,'Year not recorded'),client:text(project.client),siteArea:text(project.siteArea,metrics.siteArea),gfa:text(project.gfa,metrics.gfa),height:text(project.height,metrics.height),identity,metrics,opportunity,challenges,designResponse,outcome,whyItMatters,lessonsLearned,placeFramework:{name:text(place.name),elements:strings(place.elements)},studioAssets,searchIntelligence:normalizeSearchIntelligence(project.searchIntelligence,tags),evidence:normalizedEvidence,knowledge,services:strings(project.services),team,story,reflection:project.reflection,assets,tags,coverImage:text(project.coverImage,assets.find(asset=>asset.type==='hero')?.url||FALLBACK_PROJECT_IMAGE)}
+ return{id:text(project.id,`project-${slug(projectName)}`),projectName,visibility:project.visibility==='private'?'private':'public',status:text(project.status,identity.status),knowledgeStatus:project.knowledgeStatus==='Ready for Studio'?'Ready for Studio':'Review needed',company:text(project.company,identity.practice),location:text(project.location,identity.location),address:strings(project.address),sector:text(project.sector,'Uncategorised'),projectType:strings(project.projectType),proposal:text(project.proposal),precincts:strings(project.precincts),siteContext:strings(project.siteContext),placeStrategy:strings(project.placeStrategy),year:text(project.year,'Year not recorded'),client:text(project.client),siteArea:text(project.siteArea,metrics.siteArea),gfa:text(project.gfa,metrics.gfa),height:text(project.height,metrics.height),identity,metrics,opportunity,challenges,designResponse,outcome,whyItMatters,lessonsLearned,placeFramework:{name:text(place.name),elements:strings(place.elements)},studioAssets,searchIntelligence:normalizeSearchIntelligence(project.searchIntelligence,tags),evidence:normalizedEvidence,knowledge,services:strings(project.services),team,story,reflection:project.reflection,assets,tags,coverImage:text(project.coverImage,assets.find(asset=>asset.type==='hero')?.url||FALLBACK_PROJECT_IMAGE)}
 }
 
 export function normalizeProjects(values:unknown):Project[]{return(Array.isArray(values)?values:[]).map(normalizeProject).filter((project):project is Project=>Boolean(project))}

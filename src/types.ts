@@ -13,6 +13,7 @@ export interface StudioAssets{shortSummary:string;capabilityStatement:string;ten
 export interface SearchIntelligence{keywords:string[];concepts:string[];searchQuestionsThisProjectShouldAnswer:string[]}
 export interface Evidence{field:string;source:string;page:number|null;confidence:number|null}
 export type KnowledgeReviewStatus='reviewed'|'review-needed'|'no-evidence'|'approval-pending'|'rejected'
+export type KnowledgeReleaseStatus='Review needed'|'Ready for Studio'
 export type KnowledgeSourceType='uploaded-asset'|'team-input'
 export type KnowledgeFactKey='projectName'|'location'|'client'|'practice'|'sector'|'projectType'|'status'|'year'|'proposal'|'precincts'|'siteContext'|'placeStrategy'|'siteArea'|'gfa'|'dwellings'|'height'|'services'
 export interface KnowledgeFact{key:KnowledgeFactKey;label:string;value:string;sourceType:KnowledgeSourceType|null;assetId?:string;assetName?:string;status:KnowledgeReviewStatus}
@@ -21,6 +22,6 @@ export type DraftBasis='facts'|'team'|'both'
 export type DraftKey='summary'|'challenge'|'response'|'outcome'
 export interface FolionDraftSection{key:DraftKey;label:string;value:string;approved:boolean;basis:DraftBasis}
 export interface ProjectKnowledge{facts:KnowledgeFact[];teamInput:TeamInput;draft:FolionDraftSection[]}
-export interface Project{id:string;projectName:string;visibility:Visibility;status:string;company:string;location:string;address?:string[];sector:string;projectType?:string[];proposal?:string;precincts?:string[];siteContext?:string[];placeStrategy?:string[];year:string;client:string;siteArea:string;gfa:string;height:string;identity?:ProjectIdentity;metrics?:ProjectMetrics;opportunity?:KnowledgeItem[];challenges?:KnowledgeItem[];designResponse?:KnowledgeItem[];outcome?:ProjectOutcome;whyItMatters?:string;lessonsLearned?:string[];placeFramework?:PlaceFramework;studioAssets?:StudioAssets;searchIntelligence?:SearchIntelligence;evidence?:Evidence[];knowledge?:ProjectKnowledge;services:string[];team:TeamMember[];story:Story;reflection?:ProjectReflection;assets:Asset[];tags:string[];coverImage:string}
+export interface Project{id:string;projectName:string;visibility:Visibility;status:string;knowledgeStatus?:KnowledgeReleaseStatus;company:string;location:string;address?:string[];sector:string;projectType?:string[];proposal?:string;precincts?:string[];siteContext?:string[];placeStrategy?:string[];year:string;client:string;siteArea:string;gfa:string;height:string;identity?:ProjectIdentity;metrics?:ProjectMetrics;opportunity?:KnowledgeItem[];challenges?:KnowledgeItem[];designResponse?:KnowledgeItem[];outcome?:ProjectOutcome;whyItMatters?:string;lessonsLearned?:string[];placeFramework?:PlaceFramework;studioAssets?:StudioAssets;searchIntelligence?:SearchIntelligence;evidence?:Evidence[];knowledge?:ProjectKnowledge;services:string[];team:TeamMember[];story:Story;reflection?:ProjectReflection;assets:Asset[];tags:string[];coverImage:string}
 export interface Collection{id:string;name:string;description:string;projectIds:string[]}
 export interface Person{id:string;name:string;position:string;office:string;email:string;bio:string;skills:string[]}
