@@ -1,6 +1,6 @@
 export type Visibility='public'|'private'
 export type ProjectConfidentiality='internal-only'|'externally-shareable'|'publicly-publishable'
-export interface TeamMember{personId:string;name:string;projectRole:string}
+export interface TeamMember{personId:string;name:string;projectRole:string;contribution?:string}
 export interface Story{brief:string;challenge:string;response:string;outcome:string;lessons:string}
 export interface ProjectReflection{successFactors:string;uniqueness:string;designChallenge:string;planningChallenge:string;innovation:string;lessonsLearned:string;reusableKnowledge:string}
 export type AssetType='hero'|'report'|'plan'|'section'|'diagram'|'render'|'photo'|'document'|'other'
@@ -16,13 +16,13 @@ export interface Evidence{field:string;source:string;page:number|null;confidence
 export type KnowledgeReviewStatus='reviewed'|'review-needed'|'no-evidence'|'approval-pending'|'rejected'
 export type KnowledgeReleaseStatus='Review needed'|'Ready for Studio'
 export type KnowledgeSourceType='uploaded-asset'|'team-input'
-export type KnowledgeFactKey='projectName'|'location'|'client'|'practice'|'sector'|'projectType'|'status'|'year'|'proposal'|'precincts'|'siteContext'|'placeStrategy'|'siteArea'|'gfa'|'dwellings'|'height'|'services'
+export type KnowledgeFactKey='projectName'|'location'|'address'|'client'|'practice'|'sector'|'projectType'|'status'|'year'|'proposal'|'precincts'|'siteContext'|'placeStrategy'|'siteArea'|'gfa'|'dwellings'|'height'|'fsr'|'services'|'scope'
 export interface KnowledgeFact{key:KnowledgeFactKey;label:string;value:string;sourceType:KnowledgeSourceType|null;assetId?:string;assetName?:string;status:KnowledgeReviewStatus}
 export interface TeamInput{challengeOpportunity:string;teamResponse:string;futureRelevance:string}
 export type DraftBasis='facts'|'team'|'both'
 export type DraftKey='summary'|'challenge'|'response'|'outcome'
 export interface FolionDraftSection{key:DraftKey;label:string;value:string;approved:boolean;basis:DraftBasis}
 export interface ProjectKnowledge{facts:KnowledgeFact[];teamInput:TeamInput;draft:FolionDraftSection[]}
-export interface Project{id:string;projectName:string;visibility:Visibility;confidentiality:ProjectConfidentiality;status:string;knowledgeStatus?:KnowledgeReleaseStatus;company:string;location:string;address?:string[];sector:string;projectType?:string[];proposal?:string;precincts?:string[];siteContext?:string[];placeStrategy?:string[];year:string;client:string;siteArea:string;gfa:string;height:string;identity?:ProjectIdentity;metrics?:ProjectMetrics;opportunity?:KnowledgeItem[];challenges?:KnowledgeItem[];designResponse?:KnowledgeItem[];outcome?:ProjectOutcome;whyItMatters?:string;lessonsLearned?:string[];placeFramework?:PlaceFramework;studioAssets?:StudioAssets;searchIntelligence?:SearchIntelligence;evidence?:Evidence[];knowledge?:ProjectKnowledge;services:string[];team:TeamMember[];story:Story;reflection?:ProjectReflection;assets:Asset[];tags:string[];coverImage:string}
+export interface Project{id:string;projectName:string;visibility:Visibility;confidentiality:ProjectConfidentiality;status:string;knowledgeStatus?:KnowledgeReleaseStatus;company:string;location:string;address?:string[];sector:string;projectType?:string[];proposal?:string;precincts?:string[];siteContext?:string[];placeStrategy?:string[];scope?:string;year:string;client:string;siteArea:string;gfa:string;height:string;identity?:ProjectIdentity;metrics?:ProjectMetrics;opportunity?:KnowledgeItem[];challenges?:KnowledgeItem[];designResponse?:KnowledgeItem[];outcome?:ProjectOutcome;whyItMatters?:string;lessonsLearned?:string[];placeFramework?:PlaceFramework;studioAssets?:StudioAssets;searchIntelligence?:SearchIntelligence;evidence?:Evidence[];knowledge?:ProjectKnowledge;services:string[];team:TeamMember[];story:Story;reflection?:ProjectReflection;assets:Asset[];tags:string[];coverImage:string}
 export interface Collection{id:string;name:string;description:string;projectIds:string[]}
 export interface Person{id:string;name:string;position:string;office:string;email:string;bio:string;skills:string[]}

@@ -1,16 +1,22 @@
-import {MapPin,ShieldCheck} from 'lucide-react'
+import {MapPin,ShieldCheck,Users} from 'lucide-react'
 import {confidentialityLabel} from '../lib/confidentiality'
-import {EMPTY_STORY,FALLBACK_PROJECT_IMAGE,normalizeProject} from '../lib/project'
-import {Project,Story} from '../types'
+import {normalizeProject} from '../lib/project'
+import {Project} from '../types'
 import {Badge} from './ui'
+import ProjectGallery from './ProjectGallery'
 
-export function ProjectHero({project,editing,onNameChange}:{project?:Project|null;editing:boolean;onNameChange:(value:string)=>void}){
+const clean=(value?:string)=>value&&!['Unknown','Uncategorised','Year not recorded','Location not recorded','Project story not recorded yet.'].includes(value)?value:''
+function FactGroup({title,items}:{title:string;items:[string,string|undefined][]}){const known=items.filter((item):item is [string,string]=>Boolean(clean(item[1])));if(!known.length)return null;return <section className="overview-fact-group"><h2>{title}</h2><dl>{known.map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></section>}
+
+export function ProjectHero({project}:{project?:Project|null}){const safe=normalizeProject(project);if(!safe)return null;return <><div className="project-profile-heading"><div><p className="flex gap-2 items-center text-sm text-black/45"><MapPin size={15}/>{clean(safe.location)}{clean(safe.year)&&` · ${safe.year}`}</p><h1>{safe.projectName}</h1></div><div className="flex flex-wrap gap-2"><Badge><ShieldCheck size={11}/>{confidentialityLabel(safe.confidentiality)}</Badge>{safe.visibility==='public'&&<Badge>Published</Badge>}{clean(safe.status)&&<Badge>{safe.status}</Badge>}</div></div><ProjectGallery project={safe}/></>}
+
+export function ProjectOverview({project}:{project?:Project|null}){
  const safe=normalizeProject(project);if(!safe)return null
- return <section className="project-hero"><img src={safe.coverImage||FALLBACK_PROJECT_IMAGE} onError={event=>{event.currentTarget.src=FALLBACK_PROJECT_IMAGE}} alt={`${safe.projectName}, ${safe.location}`}/><div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/10"/><div className="absolute top-6 left-6 flex flex-wrap gap-2"><Badge tone="dark"><ShieldCheck size={11}/> {confidentialityLabel(safe.confidentiality)}</Badge>{safe.visibility==='public'&&<Badge tone="dark">Published</Badge>}<Badge tone="dark">{safe.status}</Badge></div><div className="absolute bottom-8 left-8 right-8 text-white"><p className="flex gap-2 items-center text-sm text-white/70"><MapPin size={15}/>{safe.location} · {safe.year}</p>{editing?<input className="hero-input" value={safe.projectName} onChange={event=>onNameChange(event.target.value)}/>:<h1 className="text-4xl md:text-6xl font-semibold mt-3 tracking-[-.04em]">{safe.projectName}</h1>}<p className="mt-4 max-w-2xl text-white/65">{safe.story?.brief||EMPTY_STORY.brief}</p></div></section>
+ const metrics=safe.metrics
+ return <div className="project-overview-profile">
+  <FactGroup title="Project" items={[["Project name",safe.projectName],["Type",safe.projectType?.join(' · ')],["Sector / typology",safe.sector],["Status",safe.status],["Year / dates",safe.year],["Client",safe.client],["Location",safe.location],["Address",safe.address?.join(' · ')],["Confidentiality and permitted use",confidentialityLabel(safe.confidentiality)]]}/>
+  <FactGroup title="Scale" items={[["Site area",safe.siteArea],["GFA",safe.gfa],["Dwellings",metrics?.dwellings],["Height / levels",safe.height],["FSR",metrics?.fsr]]}/>
+  <FactGroup title="Practice role" items={[["Practice",safe.company],["Services",safe.services.join(' · ')],["Scope",safe.scope||safe.identity?.role.join(' · ')]]}/>
+  {safe.team.length>0&&<section className="overview-fact-group"><h2><Users/> Project team</h2><div className="overview-team">{safe.team.map(member=><article key={member.personId}><span>{member.name.split(' ').map(part=>part[0]).join('')}</span><div><strong>{member.name}</strong><p>{member.projectRole}</p>{member.contribution&&<small>{member.contribution}</small>}</div></article>)}</div></section>}
+ </div>
 }
-
-const factFields:[keyof Project,string][]=[['status','Status'],['company','Practice'],['location','Location'],['sector','Sector'],['year','Year'],['client','Client'],['siteArea','Site area'],['gfa','GFA'],['height','Height']]
-export function ProjectFacts({project,editing,onChange}:{project?:Project|null;editing:boolean;onChange:(key:keyof Project,value:string)=>void}){const safe=normalizeProject(project);if(!safe)return null;return <aside className="project-facts"><p className="eyebrow">Project facts</p><div className="mt-4 divide-y divide-black/10 border-y border-black/10">{factFields.map(([key,label])=><div className="py-4" key={key}><div className="text-[10px] uppercase tracking-wider text-black/35 mb-1.5">{label}</div>{editing?<input className="fact-input !mt-0" value={safe[key] as string||''} onChange={event=>onChange(key,event.target.value)}/>:<div className="text-sm">{safe[key] as string||'—'}</div>}</div>)}</div></aside>}
-
-const storyLabels:Record<keyof Story,string>={brief:'The brief',challenge:'The challenge',response:'The response',outcome:'The outcome',lessons:'What we learned'}
-export function StorySection({story,editing,onChange}:{story?:Partial<Story>|null;editing:boolean;onChange:(key:keyof Story,value:string)=>void}){const safe={...EMPTY_STORY,...(story||{})};return <section><p className="eyebrow">Project story</p><h2 className="section-title mt-2">The thinking behind the work</h2><div className="mt-8 space-y-10">{(Object.keys(storyLabels) as (keyof Story)[]).map(key=><div key={key} className="story-row"><h3>{storyLabels[key]}</h3>{editing?<textarea value={safe[key]||''} onChange={event=>onChange(key,event.target.value)} placeholder={`Add ${storyLabels[key].toLowerCase()}…`}/>:<p>{safe[key]||'Not recorded yet.'}</p>}</div>)}</div></section>}

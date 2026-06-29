@@ -77,7 +77,7 @@ function normalizeEvidence(value:unknown):Evidence[]{
 }
 
 export const KNOWLEDGE_FACTS:{key:KnowledgeFactKey;label:string}[]=[
- {key:'projectName',label:'Project name'},{key:'location',label:'Location'},{key:'client',label:'Client'},{key:'practice',label:'Practice'},{key:'sector',label:'Sector / typology'},{key:'projectType',label:'Project type'},{key:'status',label:'Project status'},{key:'year',label:'Dates'},{key:'proposal',label:'Proposal'},{key:'precincts',label:'Precincts'},{key:'siteContext',label:'Site context'},{key:'placeStrategy',label:'Place strategy'},{key:'siteArea',label:'Site area'},{key:'gfa',label:'GFA'},{key:'dwellings',label:'Dwelling count'},{key:'height',label:'Height / levels'},{key:'services',label:'Services'},
+ {key:'projectName',label:'Project name'},{key:'location',label:'Location'},{key:'address',label:'Address'},{key:'client',label:'Client'},{key:'practice',label:'Practice'},{key:'sector',label:'Sector / typology'},{key:'projectType',label:'Project type'},{key:'status',label:'Project status'},{key:'year',label:'Dates'},{key:'proposal',label:'Proposal'},{key:'precincts',label:'Precincts'},{key:'siteContext',label:'Site context'},{key:'placeStrategy',label:'Place strategy'},{key:'siteArea',label:'Site area'},{key:'gfa',label:'GFA'},{key:'dwellings',label:'Dwelling count'},{key:'height',label:'Height / levels'},{key:'fsr',label:'FSR'},{key:'services',label:'Services'},{key:'scope',label:'Scope'},
 ]
 const reviewStatuses:KnowledgeReviewStatus[]=['reviewed','review-needed','no-evidence','approval-pending','rejected']
 const sourceTypes:KnowledgeSourceType[]=['uploaded-asset','team-input']
@@ -85,9 +85,11 @@ const draftDefinitions:{key:DraftKey;label:string}[]=[{key:'summary',label:'Proj
 
 function factValue(key:KnowledgeFactKey,project:Record<string,unknown>,metrics:ProjectMetrics){
  if(key==='services')return strings(project.services).join(', ')
+ if(key==='address')return strings(project.address).join('; ')
  if(key==='practice')return text(project.company)
+ if(key==='scope')return text(project.scope)
  if(key==='projectType'||key==='precincts'||key==='siteContext'||key==='placeStrategy')return strings(project[key]).join('; ')
- if(key==='dwellings')return text(metrics.dwellings)
+ if(key==='dwellings'||key==='fsr')return text(metrics[key])
  if(key==='siteArea'||key==='gfa'||key==='height')return text(project[key],text(metrics[key]))
  return text(project[key])
 }
@@ -152,14 +154,14 @@ export function normalizeProject(value:unknown):Project|null{
  const lessonsLearned=strings(project.lessonsLearned);if(!lessonsLearned.length&&text(rawStory.lessons))lessonsLearned.push(text(rawStory.lessons))
  const story:Story={brief:text(rawStory.brief,identity.description||EMPTY_STORY.brief),challenge:text(rawStory.challenge,challenges.map(item=>item.description).join(' ')),response:text(rawStory.response,designResponse.map(item=>item.description).join(' ')),outcome:text(rawStory.outcome,outcome.summary),lessons:text(rawStory.lessons,lessonsLearned.join(' '))}
  const assets=(Array.isArray(project.assets)?project.assets:[]).map(normalizeAsset).filter((asset):asset is Asset=>Boolean(asset))
- const team=records(project.team).map((member,index)=>({personId:text(member.personId,`unknown-${index}`),name:text(member.name,'Unknown team member'),projectRole:text(member.projectRole,'Role not recorded')}))
+ const team=records(project.team).map((member,index)=>({personId:text(member.personId,`unknown-${index}`),name:text(member.name,'Unknown team member'),projectRole:text(member.projectRole),contribution:text(member.contribution)||undefined}))
  const tags=strings(project.tags)
  const place=project.placeFramework&&typeof project.placeFramework==='object'?project.placeFramework as Partial<PlaceFramework>:{}
  const studioAssets=normalizeStudioAssets(project.studioAssets);const normalizedEvidence=normalizeEvidence(project.evidence);const whyItMatters=text(project.whyItMatters)
  const projectName=text(project.projectName,identity.name)
  const knowledge=normalizeProjectKnowledge(project,metrics,story,studioAssets,whyItMatters,assets,normalizedEvidence)
  const visibility=project.visibility==='public'?'public':'private';const confidentiality=confidentialityValues.includes(project.confidentiality as ProjectConfidentiality)?project.confidentiality as ProjectConfidentiality:visibility==='public'?'publicly-publishable':'internal-only'
- return{id:text(project.id,`project-${slug(projectName)}`),projectName,visibility,confidentiality,status:text(project.status,identity.status),knowledgeStatus:project.knowledgeStatus==='Ready for Studio'?'Ready for Studio':'Review needed',company:text(project.company,identity.practice),location:text(project.location,identity.location),address:strings(project.address),sector:text(project.sector,'Uncategorised'),projectType:strings(project.projectType),proposal:text(project.proposal),precincts:strings(project.precincts),siteContext:strings(project.siteContext),placeStrategy:strings(project.placeStrategy),year:text(project.year,'Year not recorded'),client:text(project.client),siteArea:text(project.siteArea,metrics.siteArea),gfa:text(project.gfa,metrics.gfa),height:text(project.height,metrics.height),identity,metrics,opportunity,challenges,designResponse,outcome,whyItMatters,lessonsLearned,placeFramework:{name:text(place.name),elements:strings(place.elements)},studioAssets,searchIntelligence:normalizeSearchIntelligence(project.searchIntelligence,tags),evidence:normalizedEvidence,knowledge,services:strings(project.services),team,story,reflection:project.reflection,assets,tags,coverImage:text(project.coverImage,assets.find(asset=>asset.type==='hero')?.url||FALLBACK_PROJECT_IMAGE)}
+ return{id:text(project.id,`project-${slug(projectName)}`),projectName,visibility,confidentiality,status:text(project.status,identity.status),knowledgeStatus:project.knowledgeStatus==='Ready for Studio'?'Ready for Studio':'Review needed',company:text(project.company,identity.practice),location:text(project.location,identity.location),address:strings(project.address),sector:text(project.sector,'Uncategorised'),projectType:strings(project.projectType),proposal:text(project.proposal),precincts:strings(project.precincts),siteContext:strings(project.siteContext),placeStrategy:strings(project.placeStrategy),scope:text(project.scope),year:text(project.year,'Year not recorded'),client:text(project.client),siteArea:text(project.siteArea,metrics.siteArea),gfa:text(project.gfa,metrics.gfa),height:text(project.height,metrics.height),identity,metrics,opportunity,challenges,designResponse,outcome,whyItMatters,lessonsLearned,placeFramework:{name:text(place.name),elements:strings(place.elements)},studioAssets,searchIntelligence:normalizeSearchIntelligence(project.searchIntelligence,tags),evidence:normalizedEvidence,knowledge,services:strings(project.services),team,story,reflection:project.reflection,assets,tags,coverImage:text(project.coverImage,assets.find(asset=>asset.type==='hero')?.url||FALLBACK_PROJECT_IMAGE)}
 }
 
 export function normalizeProjects(values:unknown):Project[]{return(Array.isArray(values)?values:[]).map(normalizeProject).filter((project):project is Project=>Boolean(project))}
