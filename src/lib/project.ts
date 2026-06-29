@@ -111,7 +111,7 @@ function normalizeProjectKnowledge(project:Record<string,unknown>,metrics:Projec
   const inferredSource:KnowledgeSourceType|null=value?(matchingEvidence||primaryReport?'uploaded-asset':'team-input'):null
   const sourceType=existing&&sourceTypes.includes(existing.sourceType as KnowledgeSourceType)?existing.sourceType:inferredSource
   const status=existing&&reviewStatuses.includes(existing.status)?existing.status:value?'approval-pending':'no-evidence'
-  return{key,label,value,sourceType,assetId:existing?.assetId||primaryReport?.id,assetName:existing?.assetName||matchingEvidence?.source||primaryReport?.title,status} as KnowledgeFact
+  return{key,label,value,sourceType,assetId:sourceType==='uploaded-asset'?(existing?.assetId||primaryReport?.id):undefined,assetName:sourceType==='uploaded-asset'?(existing?.assetName||matchingEvidence?.source||primaryReport?.title):undefined,status} as KnowledgeFact
  })
  const teamInput=normalizeTeamInput(raw.teamInput)
  const rawDraft=new Map((Array.isArray(raw.draft)?raw.draft:[]).filter((item):item is FolionDraftSection=>Boolean(item)&&typeof item==='object').map(item=>[item.key,item]))

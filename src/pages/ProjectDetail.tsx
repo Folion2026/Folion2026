@@ -17,9 +17,8 @@ export default function ProjectDetail(){
  const changeTab=(tab:DetailTab)=>setSearchParams(tab==='overview'?{}:{tab})
  return <div className="project-record">
   <div className="detail-toolbar"><button onClick={()=>navigate(-1)} className="detail-back"><ArrowLeft size={16}/> Back to projects</button></div>
-  <ProjectHero project={project}/>
   <nav className="detail-tabs" aria-label="Project detail sections">{(['overview','knowledge','sources'] as DetailTab[]).map(tab=><button key={tab} className={activeTab===tab?'active':''} onClick={()=>changeTab(tab)}>{tab[0].toUpperCase()+tab.slice(1)}</button>)}</nav>
-  {activeTab==='overview'&&<ProjectOverview project={project}/>}
+  {activeTab==='overview'&&<><ProjectHero project={project}/><ProjectOverview project={project}/></>}
   {activeTab==='knowledge'&&<KnowledgeModelSections project={project}/>}
   {activeTab==='sources'&&<ProjectKnowledgeRecord project={project} onUpdate={updateProject}/>}
  </div>
