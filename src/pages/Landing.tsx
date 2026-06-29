@@ -50,7 +50,7 @@ export default function Landing(){
     <header className="landing-nav">
       <FolionLogo/>
       <nav className="hidden md:flex gap-7 text-sm"><a href="#memory">How it works</a><a href="#project-memory">Project memory</a><Link to="/magazine">Magazine</Link></nav>
-      <Link to="/home"><Button variant="light">Enter demo <ArrowRight size={16}/></Button></Link>
+      <Link to="/sign-in"><Button variant="light">Sign in <ArrowRight size={16}/></Button></Link>
     </header>
     <main>
       <section className="hero-landing">
@@ -59,7 +59,7 @@ export default function Landing(){
           <p className="eyebrow text-white/55 mb-6">A collective memory for design practices</p>
           <h1>Build your firm's memory.</h1>
           <p className="hero-copy">Folion turns the work your practice has already done into knowledge your whole team can find, shape and use again.</p>
-          <div className="mt-9 flex flex-wrap gap-3"><Link to="/home"><Button variant="acid">Explore the MVP <ArrowRight size={17}/></Button></Link><a href="#memory"><Button variant="light">See how it works</Button></a></div>
+          <div className="mt-9 flex flex-wrap gap-3"><Link to="/sign-in"><Button variant="acid">Sign in to Folion <ArrowRight size={17}/></Button></Link><a href="#memory"><Button variant="light">See how it works</Button></a></div>
         </div>
         <div className="hero-index"><span>Projects</span><span>People</span><span>Stories</span><strong>Remembered →</strong></div>
         <div className="hero-scroll">Scroll to remember <span>↓</span></div>
@@ -81,8 +81,8 @@ export default function Landing(){
 
       <section className="landing-section"><div className="flex flex-col md:flex-row justify-between md:items-end gap-6"><div><p className="eyebrow">A simple rhythm</p><h2 className="landing-h2 max-w-2xl">Capture. Find. Reuse.</h2></div><Link to="/projects"><Button variant="ghost">Explore projects <ArrowRight size={16}/></Button></Link></div><div className="steps-grid">{steps.map(step=><article key={step.number}><span>{step.number}</span><h3>{step.title}</h3><p>{step.body}</p></article>)}</div></section>
 
-      <section id="about" className="landing-cta"><div><p className="eyebrow text-white/45">Your practice already knows more than it can find.</p><h2>Bring the memory together.</h2></div><div><p>Start with four projects. Search the stories. Build one useful collection. That is enough to learn what Folion can become for your practice.</p><Link to="/home"><Button variant="acid">Enter the working prototype <ArrowRight size={17}/></Button></Link></div><FolderPlus className="cta-mark"/></section>
+      <section id="about" className="landing-cta"><div><p className="eyebrow text-white/45">Your practice already knows more than it can find.</p><h2>Bring the memory together.</h2></div><div><p>Start with four projects. Search the stories. Build one useful collection. That is enough to learn what Folion can become for your practice.</p><Link to="/sign-in"><Button variant="acid">Sign in to Folion <ArrowRight size={17}/></Button></Link></div><FolderPlus className="cta-mark"/></section>
     </main>
-    <footer className="landing-footer"><div><FolionLogo/><p>A working prototype for better practice memory.</p></div><div><Link to="/home">Practice demo</Link><Link to="/magazine">Magazine</Link><a href="#memory">How it works</a></div><span>Folion · 2026</span></footer>
+    <footer className="landing-footer"><div><FolionLogo/><p>A working prototype for better practice memory.</p></div><div><Link to="/sign-in">Sign in</Link><Link to="/magazine">Magazine</Link><a href="#memory">How it works</a></div><span>Folion · 2026</span></footer>
   </div>
 }

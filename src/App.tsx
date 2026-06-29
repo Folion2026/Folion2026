@@ -1,4 +1,4 @@
-import {BrowserRouter,Route,Routes} from 'react-router-dom'
+import {BrowserRouter,Navigate,Route,Routes} from 'react-router-dom'
 import {StoreProvider} from './store'
 import {AppShell} from './components/Shell'
 import Landing from './pages/Landing'
@@ -14,4 +14,4 @@ import Magazine from './pages/Magazine'
 import FolionId from './pages/FolionId'
 import {AuthProvider} from './auth'
 import AuthGate from './components/AuthGate'
-export default function App(){return <AuthProvider><StoreProvider><BrowserRouter><Routes><Route path="/" element={<Landing/>}/><Route path="/magazine" element={<Magazine/>}/><Route path="/company/:id" element={<CompanyProfile/>}/><Route element={<AuthGate><AppShell/></AuthGate>}><Route path="/home" element={<Home/>}/><Route path="/projects" element={<Projects/>}/><Route path="/projects/:id" element={<ProjectDetail/>}/><Route path="/new-project" element={<NewProject/>}/><Route path="/project-reflection" element={<ProjectReflection/>}/><Route path="/collections/:id" element={<CollectionPage/>}/><Route path="/studio" element={<Studio/>}/><Route path="/folion-id" element={<FolionId/>}/></Route></Routes></BrowserRouter></StoreProvider></AuthProvider>}
+export default function App(){return <AuthProvider><StoreProvider><BrowserRouter><Routes><Route path="/" element={<Landing/>}/><Route path="/sign-in" element={<AuthGate><Navigate to="/home" replace/></AuthGate>}/><Route path="/magazine" element={<Magazine/>}/><Route path="/company/:id" element={<CompanyProfile/>}/><Route element={<AuthGate><AppShell/></AuthGate>}><Route path="/home" element={<Home/>}/><Route path="/projects" element={<Projects/>}/><Route path="/projects/:id" element={<ProjectDetail/>}/><Route path="/new-project" element={<NewProject/>}/><Route path="/project-reflection" element={<ProjectReflection/>}/><Route path="/collections/:id" element={<CollectionPage/>}/><Route path="/studio" element={<Studio/>}/><Route path="/folion-id" element={<FolionId/>}/></Route></Routes></BrowserRouter></StoreProvider></AuthProvider>}

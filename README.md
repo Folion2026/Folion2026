@@ -54,26 +54,31 @@ npm run dev
 
 Open `http://localhost:3001`. The Vite server proxies `/api` to `http://127.0.0.1:8787`.
 
+The public landing page is `/`. It uses only the bundled static preview. `/sign-in` owns the invite-only magic-link screen, and every persistent workspace route (`/home`, `/projects`, `/studio`, `/folion-id` and project routes) is protected by `AuthGate`.
+
 The first Owner workspace imports the existing Taverners Hill project and People fixtures once, into Postgres. Subsequent project, team, review and confidentiality changes autosave through the API. Categorized files are uploaded to private Storage with short-lived signed upload tokens.
 
 ## VPS deployment
 
 1. Install Docker Engine and the Compose plugin on the VPS.
-2. Clone the repository and create `.env` from `.env.example` with production values.
+2. Clone the repository to `/docker/folion` and create `/docker/folion/.env` from `.env.example` with production values.
 3. Add the production HTTPS origin and `/home` redirect to Supabase Auth redirect URLs.
 4. Apply migrations from a trusted workstation or CI using `npx supabase db push`.
 5. Build and start both containers:
 
 ```bash
+cd /docker/folion
+docker compose config
 docker compose up -d --build
 docker compose ps
 ```
 
-The web container listens on port `3001` and proxies `/api` internally to the API container. Put your TLS reverse proxy in front of port `3001`; do not expose API port `8787` publicly.
+When run from `/docker/folion`, Compose automatically reads `/docker/folion/.env`, passes the two `VITE_` values as web-image build arguments, and passes server-only values only to the API container. The Dockerfile deliberately fails the web build if either client value is empty. The web container listens on port `3001` and proxies `/api` internally to the API container. Put your TLS reverse proxy in front of port `3001`; do not expose API port `8787` publicly.
 
 To deploy an update:
 
 ```bash
+cd /docker/folion
 git pull --ff-only
 npx supabase db push
 docker compose up -d --build
