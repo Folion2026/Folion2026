@@ -20,7 +20,7 @@ export default function ProjectKnowledgeRecord({project,onUpdate}:{project:Proje
  const saveKnowledge=(next:ProjectKnowledge)=>onUpdate({...safe,knowledge:next})
  const updateFact=(key:KnowledgeFactKey,patch:Partial<KnowledgeFact>)=>{
   const facts=knowledge.facts.map(fact=>fact.key===key?{...fact,...patch}:fact);const changed=facts.find(fact=>fact.key===key)!;let next:Project={...safe,knowledge:{...knowledge,facts}}
-  if('value'in patch){const value=changed.value;if(key==='services')next={...next,services:value.split(',').map(item=>item.trim()).filter(Boolean)};else if(key==='dwellings')next={...next,metrics:{...next.metrics!,dwellings:value}};else{next={...next,[key]:value};if(['siteArea','gfa','height'].includes(key))next={...next,metrics:{...next.metrics!,[key]:value}}}}
+  if('value'in patch){const value=changed.value;if(key==='services')next={...next,services:value.split(',').map(item=>item.trim()).filter(Boolean)};else if(key==='practice')next={...next,company:value};else if(['projectType','precincts','siteContext','placeStrategy'].includes(key))next={...next,[key]:value.split(';').map(item=>item.trim()).filter(Boolean)};else if(key==='dwellings')next={...next,metrics:{...next.metrics!,dwellings:value}};else{next={...next,[key]:value};if(['siteArea','gfa','height'].includes(key))next={...next,metrics:{...next.metrics!,[key]:value}}}}
   onUpdate(next)
  }
  const beginEdit=(fact:KnowledgeFact)=>{setEditingKey(fact.key);setEditValue(fact.value)}
