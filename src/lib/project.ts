@@ -39,7 +39,7 @@ function normalizeAsset(value:unknown,index:number):Asset|null{
  if(typeof value==='string')return{id:`legacy-asset-${index}`,type:'other',title:`Project asset ${index+1}`,caption:'',url:value,sourcePage:null,tags:[],uploadedCategory:'Other',isPrimary:false,isSelectedForGallery:true}
  if(!value||typeof value!=='object')return null
  const asset=value as Partial<Asset>;const type=assetTypes.includes(asset.type as AssetType)?asset.type as AssetType:'other'
- return{id:text(asset.id,`asset-${index}`),type,title:text(asset.title,`Project asset ${index+1}`),caption:text(asset.caption),url:text(asset.url),sourcePage:typeof asset.sourcePage==='number'?asset.sourcePage:null,tags:strings(asset.tags),uploadedCategory:text(asset.uploadedCategory,type),isPrimary:Boolean(asset.isPrimary),isSelectedForGallery:asset.isSelectedForGallery!==false}
+ return{id:text(asset.id,`asset-${index}`),type,title:text(asset.title,`Project asset ${index+1}`),caption:text(asset.caption),url:text(asset.url),storagePath:text(asset.storagePath)||undefined,sourcePage:typeof asset.sourcePage==='number'?asset.sourcePage:null,tags:strings(asset.tags),uploadedCategory:text(asset.uploadedCategory,type),isPrimary:Boolean(asset.isPrimary),isSelectedForGallery:asset.isSelectedForGallery!==false}
 }
 
 function normalizeKnowledgeItems(value:unknown,fallback?:string):KnowledgeItem[]{

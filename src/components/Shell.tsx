@@ -1,11 +1,12 @@
 import {useEffect,useState} from 'react'
 import {NavLink,Outlet,useLocation} from 'react-router-dom'
-import {BookOpen,FolderKanban,Home,IdCard,Menu,Plus,Search,Sparkles,X} from 'lucide-react'
+import {BookOpen,FolderKanban,Home,IdCard,LogOut,Menu,Plus,Search,Sparkles,X} from 'lucide-react'
 import FolionLogo from './FolionLogo'
 import {Button} from './ui'
 import {useStore} from '../store'
 import CommandPalette from './CommandPalette'
 import {normalizeProjects} from '../lib/project'
+import {useAuth} from '../auth'
 
 const nav=[
   ['/home','Home',Home],
@@ -24,7 +25,7 @@ const routeTitles:Record<string,{eyebrow:string;title:string}>={
 }
 
 export function Sidebar({open,onClose}:{open:boolean;onClose:()=>void}){
-  const {collections,projects}=useStore()
+  const {collections,projects,people}=useStore();const {user,signOut}=useAuth()
   const safeProjects=normalizeProjects(projects)
   const activeProjects=safeProjects.filter(project=>project.status!=='Archived').length
   const practiceName=safeProjects[0]?.company||'Your practice'
@@ -49,9 +50,9 @@ export function Sidebar({open,onClose}:{open:boolean;onClose:()=>void}){
       <div className="mt-auto">
         <div className="practice-switcher">
           <div className="flex items-start justify-between gap-3"><div><div className="sidebar-label !text-white/45">Current practice</div><div className="mt-2 text-sm font-medium">{practiceName}</div></div><div className="grid grid-cols-2 gap-0.5 mt-1">{['#ff6b57','#d6ff5c','#51a4ff','#cf88ff'].map(c=><i key={c} className="h-1.5 w-1.5" style={{background:c}}/>)}</div></div>
-          <div className="mt-4 pt-3 border-t border-white/10 text-xs text-white/50">{activeProjects} active projects · 4 people</div>
+          <div className="mt-4 pt-3 border-t border-white/10 text-xs text-white/50">{activeProjects} active projects · {people.length} people</div>
         </div>
-        <div className="flex items-center gap-3 mt-4 px-1"><div className="avatar">MC</div><div className="text-sm"><div className="font-medium">Maya Chen</div><div className="text-black/45">Design Director</div></div></div>
+        <div className="flex items-center gap-3 mt-4 px-1"><div className="avatar">{(user?.email||'F').slice(0,2).toUpperCase()}</div><div className="min-w-0 text-sm"><div className="font-medium truncate">{user?.user_metadata?.display_name||user?.email?.split('@')[0]||'Folion user'}</div><div className="text-black/45 truncate">{user?.email}</div></div><button className="ml-auto text-black/35 hover:text-ink" onClick={()=>void signOut()} aria-label="Sign out"><LogOut size={16}/></button></div>
       </div>
     </aside>
   </>
@@ -74,7 +75,8 @@ export function TopBar({onMenu,onSearch}:{onMenu:()=>void;onSearch:()=>void}){
 export function AppShell(){
   const [open,setOpen]=useState(false)
   const [searchOpen,setSearchOpen]=useState(false)
+  const {error}=useStore()
   const {pathname}=useLocation()
   useEffect(()=>setOpen(false),[pathname])
-  return <div className="min-h-screen bg-paper text-ink"><Sidebar open={open} onClose={()=>setOpen(false)}/><div className="lg:pl-[248px]"><TopBar onMenu={()=>setOpen(true)} onSearch={()=>setSearchOpen(true)}/><main className="page"><Outlet/></main></div><CommandPalette open={searchOpen} onClose={()=>setSearchOpen(false)}/></div>
+  return <div className="min-h-screen bg-paper text-ink"><Sidebar open={open} onClose={()=>setOpen(false)}/><div className="lg:pl-[248px]"><TopBar onMenu={()=>setOpen(true)} onSearch={()=>setSearchOpen(true)}/>{error&&<div className="data-error" role="alert">{error}</div>}<main className="page"><Outlet/></main></div><CommandPalette open={searchOpen} onClose={()=>setSearchOpen(false)}/></div>
 }

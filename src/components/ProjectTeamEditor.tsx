@@ -1,9 +1,10 @@
 import {Plus,Trash2,Users} from 'lucide-react'
 import {useState} from 'react'
-import people from '../data/people.json'
 import {TeamMember} from '../types'
+import {useStore} from '../store'
 
 export default function ProjectTeamEditor({team,onChange,compact=false}:{team:TeamMember[];onChange:(team:TeamMember[])=>void;compact?:boolean}){
+ const {people}=useStore()
  const available=people.filter(person=>!team.some(member=>member.personId===person.id));const [personId,setPersonId]=useState('')
  const add=()=>{const person=people.find(item=>item.id===personId);if(!person)return;onChange([...team,{personId:person.id,name:person.name,projectRole:'',contribution:''}]);setPersonId('')}
  const update=(personId:string,patch:Partial<TeamMember>)=>onChange(team.map(member=>member.personId===personId?{...member,...patch}:member))
