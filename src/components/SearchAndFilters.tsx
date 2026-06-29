@@ -5,6 +5,6 @@ export function SearchBar({value,onChange}:{value:string;onChange:(value:string)
 }
 
 export function FilterChips({active,onChange}:{active:string;onChange:(value:string)=>void}){
-  const filters=['All','Public','Private','Residential','Workplace','Education','Hospitality']
+  const filters=['All','Internal only','Externally shareable','Publicly publishable','Residential','Workplace','Education','Hospitality']
   return <div className="filter-row"><SlidersHorizontal size={15}/>{filters.map(filter=><button key={filter} onClick={()=>onChange(filter)} className={`chip ${active===filter?'active':''}`} aria-pressed={active===filter}>{filter}</button>)}</div>
 }

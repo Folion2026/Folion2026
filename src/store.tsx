@@ -15,7 +15,7 @@ export function StoreProvider({children}:{children:ReactNode}){
  const addProject=(p:Project)=>setProjects(x=>{const safe=normalizeProject(p);return safe?[safe,...x]:x})
  const updateProject=(p:Project)=>setProjects(x=>{const safe=normalizeProject(p);return safe?x.map(v=>v.id===safe.id?safe:v):x})
  const archiveSelected=()=>{setProjects(x=>x.map(p=>selected.includes(p.id)?{...p,status:'Archived'}:p));clearSelected()}
- const setSelectedVisibility=(visibility:Visibility)=>{setProjects(x=>x.map(p=>selected.includes(p.id)?{...p,visibility}:p));clearSelected()}
+ const setSelectedVisibility=(visibility:Visibility)=>{setProjects(x=>x.map(p=>selected.includes(p.id)&&(visibility==='private'||p.confidentiality==='publicly-publishable')?{...p,visibility}:p));clearSelected()}
  const createCollection=(name:string)=>{const c={id:`collection-${Date.now()}`,name,description:'A curated project story.',projectIds:[]};setCollections(x=>[c,...x]);return c}
  const renameCollection=(id:string,name:string)=>setCollections(x=>x.map(c=>c.id===id?{...c,name}:c))
  const toggleProjectInCollection=(cid:string,pid:string)=>setCollections(x=>x.map(c=>c.id===cid?{...c,projectIds:c.projectIds.includes(pid)?c.projectIds.filter(i=>i!==pid):[...c.projectIds,pid]}:c))
