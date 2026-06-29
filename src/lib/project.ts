@@ -1,4 +1,4 @@
-import {Asset,AssetType,Evidence,KnowledgeItem,PlaceFramework,Project,ProjectIdentity,ProjectMetrics,ProjectOutcome,SearchIntelligence,Story,StudioAssets} from '../types'
+import {Asset,AssetType,DraftBasis,DraftKey,Evidence,FolionDraftSection,KnowledgeFact,KnowledgeFactKey,KnowledgeItem,KnowledgeReviewStatus,KnowledgeSourceType,PlaceFramework,Project,ProjectIdentity,ProjectKnowledge,ProjectMetrics,ProjectOutcome,SearchIntelligence,Story,StudioAssets,TeamInput} from '../types'
 
 export const FALLBACK_PROJECT_IMAGE='data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800"%3E%3Crect width="1200" height="800" fill="%23d9d8d1"/%3E%3Cpath d="M0 620L310 350l210 190 190-150 490 310v100H0z" fill="%23b8b9b1"/%3E%3Ccircle cx="930" cy="190" r="72" fill="%23d6ff5c"/%3E%3C/svg%3E'
 
@@ -51,6 +51,62 @@ function normalizeEvidence(value:unknown):Evidence[]{
  return records(value).map(item=>({field:text(item.field,'Unknown field'),source:text(item.source,'Source not recorded'),page:typeof item.page==='number'?item.page:null,confidence:typeof item.confidence==='number'?item.confidence:null}))
 }
 
+export const KNOWLEDGE_FACTS:{key:KnowledgeFactKey;label:string}[]=[
+ {key:'projectName',label:'Project name'},{key:'location',label:'Location'},{key:'client',label:'Client'},{key:'sector',label:'Sector / typology'},{key:'status',label:'Project status'},{key:'year',label:'Dates'},{key:'siteArea',label:'Site area'},{key:'gfa',label:'GFA'},{key:'dwellings',label:'Dwelling count'},{key:'height',label:'Height / levels'},{key:'services',label:'Services'},
+]
+const reviewStatuses:KnowledgeReviewStatus[]=['reviewed','review-needed','no-evidence','approval-pending','rejected']
+const sourceTypes:KnowledgeSourceType[]=['uploaded-asset','team-input']
+const draftDefinitions:{key:DraftKey;label:string}[]=[{key:'summary',label:'Project summary'},{key:'challenge',label:'Challenge'},{key:'response',label:'Response'},{key:'outcome',label:'Outcome / relevance'}]
+
+function factValue(key:KnowledgeFactKey,project:Record<string,unknown>,metrics:ProjectMetrics){
+ if(key==='services')return strings(project.services).join(', ')
+ if(key==='dwellings')return text(metrics.dwellings)
+ if(key==='siteArea'||key==='gfa'||key==='height')return text(project[key],text(metrics[key]))
+ return text(project[key])
+}
+
+function normalizeTeamInput(value:unknown):TeamInput{
+ const input=value&&typeof value==='object'?value as Partial<TeamInput>:{}
+ return{challengeOpportunity:text(input.challengeOpportunity),teamResponse:text(input.teamResponse),futureRelevance:text(input.futureRelevance)}
+}
+
+function draftBasis(hasFacts:boolean,hasTeam:boolean):DraftBasis{return hasFacts&&hasTeam?'both':hasTeam?'team':'facts'}
+
+function normalizeProjectKnowledge(project:Record<string,unknown>,metrics:ProjectMetrics,story:Story,studio:StudioAssets,whyItMatters:string,assets:Asset[],evidence:Evidence[]):ProjectKnowledge{
+ const raw=project.knowledge&&typeof project.knowledge==='object'?project.knowledge as Partial<ProjectKnowledge>:{}
+ const rawFacts=new Map((Array.isArray(raw.facts)?raw.facts:[]).filter((item):item is KnowledgeFact=>Boolean(item)&&typeof item==='object').map(item=>[item.key,item]))
+ const primaryReport=assets.find(asset=>asset.type==='report'&&asset.isPrimary)||assets.find(asset=>asset.type==='report')
+ const facts=KNOWLEDGE_FACTS.map(({key,label})=>{
+  const existing=rawFacts.get(key);const value=existing?text(existing.value):factValue(key,project,metrics)
+  const matchingEvidence=evidence.find(item=>item.field.toLowerCase()===key.toLowerCase()||item.field.toLowerCase().includes(key.toLowerCase()))
+  const inferredSource:KnowledgeSourceType|null=value?(matchingEvidence||primaryReport?'uploaded-asset':'team-input'):null
+  const sourceType=existing&&sourceTypes.includes(existing.sourceType as KnowledgeSourceType)?existing.sourceType:inferredSource
+  const status=existing&&reviewStatuses.includes(existing.status)?existing.status:value?'approval-pending':'no-evidence'
+  return{key,label,value,sourceType,assetId:existing?.assetId||primaryReport?.id,assetName:existing?.assetName||matchingEvidence?.source||primaryReport?.title,status} as KnowledgeFact
+ })
+ const teamInput=normalizeTeamInput(raw.teamInput)
+ const rawDraft=new Map((Array.isArray(raw.draft)?raw.draft:[]).filter((item):item is FolionDraftSection=>Boolean(item)&&typeof item==='object').map(item=>[item.key,item]))
+ const draftSeeds:Record<DraftKey,{value:string;basis:DraftBasis}>={
+  summary:{value:text(studio.shortSummary,story.brief===EMPTY_STORY.brief?'':story.brief),basis:'facts'},
+  challenge:{value:text(teamInput.challengeOpportunity,story.challenge),basis:draftBasis(Boolean(story.challenge),Boolean(teamInput.challengeOpportunity))},
+  response:{value:text(teamInput.teamResponse,story.response),basis:draftBasis(Boolean(story.response),Boolean(teamInput.teamResponse))},
+  outcome:{value:text(teamInput.futureRelevance,text(whyItMatters,story.outcome)),basis:draftBasis(Boolean(whyItMatters||story.outcome),Boolean(teamInput.futureRelevance))},
+ }
+ const draft=draftDefinitions.map(({key,label})=>{const existing=rawDraft.get(key);return{key,label,value:existing?text(existing.value):draftSeeds[key].value,approved:Boolean(existing?.approved),basis:existing?.basis||draftSeeds[key].basis}})
+ return{facts,teamInput,draft}
+}
+
+export function projectKnowledgeStatus(project:Project){
+ const knowledge=project.knowledge
+ if(!knowledge)return'Review needed' as const
+ const unresolvedFact=knowledge.facts.some(fact=>Boolean(fact.value)&&!['reviewed','rejected'].includes(fact.status))
+ const unresolvedDraft=knowledge.draft.some(section=>Boolean(section.value)&&!section.approved)
+ return unresolvedFact||unresolvedDraft?'Review needed' as const:'Ready for Studio' as const
+}
+
+export function reviewedKnowledgeFacts(project:Project){return(project.knowledge?.facts||[]).filter(fact=>fact.status==='reviewed'&&Boolean(fact.value))}
+export function approvedDraftSections(project:Project){return(project.knowledge?.draft||[]).filter(section=>section.approved&&Boolean(section.value))}
+
 export function normalizeProject(value:unknown):Project|null{
  if(!value||typeof value!=='object')return null
  const project=value as Partial<Project>&Record<string,unknown>
@@ -67,8 +123,10 @@ export function normalizeProject(value:unknown):Project|null{
  const team=records(project.team).map((member,index)=>({personId:text(member.personId,`unknown-${index}`),name:text(member.name,'Unknown team member'),projectRole:text(member.projectRole,'Role not recorded')}))
  const tags=strings(project.tags)
  const place=project.placeFramework&&typeof project.placeFramework==='object'?project.placeFramework as Partial<PlaceFramework>:{}
+ const studioAssets=normalizeStudioAssets(project.studioAssets);const normalizedEvidence=normalizeEvidence(project.evidence);const whyItMatters=text(project.whyItMatters)
  const projectName=text(project.projectName,identity.name)
- return{id:text(project.id,`project-${slug(projectName)}`),projectName,visibility:project.visibility==='private'?'private':'public',status:text(project.status,identity.status),company:text(project.company,identity.practice),location:text(project.location,identity.location),address:strings(project.address),sector:text(project.sector,'Uncategorised'),projectType:strings(project.projectType),year:text(project.year,'Year not recorded'),client:text(project.client),siteArea:text(project.siteArea,metrics.siteArea),gfa:text(project.gfa,metrics.gfa),height:text(project.height,metrics.height),identity,metrics,opportunity,challenges,designResponse,outcome,whyItMatters:text(project.whyItMatters),lessonsLearned,placeFramework:{name:text(place.name),elements:strings(place.elements)},studioAssets:normalizeStudioAssets(project.studioAssets),searchIntelligence:normalizeSearchIntelligence(project.searchIntelligence,tags),evidence:normalizeEvidence(project.evidence),services:strings(project.services),team,story,reflection:project.reflection,assets,tags,coverImage:text(project.coverImage,assets.find(asset=>asset.type==='hero')?.url||FALLBACK_PROJECT_IMAGE)}
+ const knowledge=normalizeProjectKnowledge(project,metrics,story,studioAssets,whyItMatters,assets,normalizedEvidence)
+ return{id:text(project.id,`project-${slug(projectName)}`),projectName,visibility:project.visibility==='private'?'private':'public',status:text(project.status,identity.status),company:text(project.company,identity.practice),location:text(project.location,identity.location),address:strings(project.address),sector:text(project.sector,'Uncategorised'),projectType:strings(project.projectType),year:text(project.year,'Year not recorded'),client:text(project.client),siteArea:text(project.siteArea,metrics.siteArea),gfa:text(project.gfa,metrics.gfa),height:text(project.height,metrics.height),identity,metrics,opportunity,challenges,designResponse,outcome,whyItMatters,lessonsLearned,placeFramework:{name:text(place.name),elements:strings(place.elements)},studioAssets,searchIntelligence:normalizeSearchIntelligence(project.searchIntelligence,tags),evidence:normalizedEvidence,knowledge,services:strings(project.services),team,story,reflection:project.reflection,assets,tags,coverImage:text(project.coverImage,assets.find(asset=>asset.type==='hero')?.url||FALLBACK_PROJECT_IMAGE)}
 }
 
 export function normalizeProjects(values:unknown):Project[]{return(Array.isArray(values)?values:[]).map(normalizeProject).filter((project):project is Project=>Boolean(project))}
@@ -81,6 +139,6 @@ function collectSearchText(value:unknown,output:string[]){
 
 export function projectSearchText(project:Project){
  const output:string[]=[]
- collectSearchText({projectName:project.projectName,status:project.status,company:project.company,location:project.location,address:project.address,sector:project.sector,projectType:project.projectType,year:project.year,client:project.client,identity:project.identity,metrics:project.metrics,opportunity:project.opportunity,challenges:project.challenges,designResponse:project.designResponse,outcome:project.outcome,whyItMatters:project.whyItMatters,lessonsLearned:project.lessonsLearned,placeFramework:project.placeFramework,studioAssets:project.studioAssets,searchIntelligence:project.searchIntelligence,services:project.services,tags:project.tags,story:project.story,reflection:project.reflection},output)
+ collectSearchText({projectName:project.projectName,status:project.status,company:project.company,location:project.location,address:project.address,sector:project.sector,projectType:project.projectType,year:project.year,client:project.client,identity:project.identity,metrics:project.metrics,opportunity:project.opportunity,challenges:project.challenges,designResponse:project.designResponse,outcome:project.outcome,whyItMatters:project.whyItMatters,lessonsLearned:project.lessonsLearned,placeFramework:project.placeFramework,studioAssets:project.studioAssets,searchIntelligence:project.searchIntelligence,knowledge:project.knowledge,services:project.services,tags:project.tags,story:project.story,reflection:project.reflection},output)
  return output.join(' ').toLowerCase()
 }
