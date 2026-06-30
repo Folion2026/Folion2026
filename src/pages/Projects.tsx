@@ -1,6 +1,6 @@
 import {FolderPlus,Globe2,Lock,Plus,Share2,Sparkles} from 'lucide-react'
 import {useMemo,useState} from 'react'
-import {Link} from 'react-router-dom'
+import {Link,useLocation} from 'react-router-dom'
 import CollectionCard from '../components/CollectionCard'
 import BottomSelectionBar from '../components/BottomSelectionBar'
 import ProjectCard from '../components/ProjectCard'
@@ -12,6 +12,7 @@ import {normalizeProjects,projectSearchText} from '../lib/project'
 const exampleQueries=['employment land transition','public domain and density','creative makers precinct']
 
 export default function Projects(){
+  const location=useLocation();const notice=(location.state as {notice?:string}|null)?.notice
   const {projects,collections,createCollection}=useStore()
   const [query,setQuery]=useState('')
   const [filter,setFilter]=useState('All')
@@ -35,6 +36,7 @@ export default function Projects(){
   const create=()=>{if(!collectionName.trim())return;createCollection(collectionName.trim());setCollectionName('');setCollectionModal(false)}
 
   return <div>
+    {notice&&<div className="auth-message mb-5" role="status">{notice}</div>}
     <header className="projects-header">
       <div><p className="eyebrow">Project memory</p><h1 className="page-title mt-2">Find what the practice knows.</h1><p className="projects-intro">Search the facts, stories, services and lessons inside every project.</p></div>
       <Link to="/new-project"><Button><Plus size={17}/> New project</Button></Link>
