@@ -4,7 +4,7 @@ export interface TeamMember{personId:string;name:string;projectRole:string;contr
 export interface Story{brief:string;challenge:string;response:string;outcome:string;lessons:string}
 export interface ProjectReflection{successFactors:string;uniqueness:string;designChallenge:string;planningChallenge:string;innovation:string;lessonsLearned:string;reusableKnowledge:string}
 export type AssetType='hero'|'report'|'plan'|'section'|'diagram'|'render'|'photo'|'document'|'other'
-export interface Asset{id:string;type:AssetType;title:string;caption:string;url:string;storagePath?:string;sourcePage:number|null;tags:string[];uploadedCategory:string;isPrimary:boolean;isSelectedForGallery:boolean}
+export interface Asset{id:string;type:AssetType;title:string;caption:string;url:string;storagePath?:string;fileName?:string;mimeType?:string;fileSize?:number;uploadedAt?:string;uploadedBy?:string;sourcePage:number|null;tags:string[];uploadedCategory:string;isPrimary:boolean;isSelectedForGallery:boolean}
 export interface KnowledgeItem{title:string;description:string}
 export interface ProjectIdentity{name:string;location:string;status:string;practice:string;collaborators:string[];role:string[];description:string}
 export interface ProjectMetrics{siteArea:string;fsr:string;height:string;publicDomain:string;publicDomainPercentage:string;affordableHousing:string;gfa:string;dwellings:string}

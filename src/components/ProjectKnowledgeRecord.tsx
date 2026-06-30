@@ -7,6 +7,7 @@ import {FolionDraftSection,KnowledgeFact,KnowledgeFactKey,Project,ProjectKnowled
 import {Button,Modal} from './ui'
 import ConfidentialityControl from './ConfidentialityControl'
 import ProjectGallery from './ProjectGallery'
+import ProjectAssetUploader from './ProjectAssetUploader'
 import ProjectTeamEditor from './ProjectTeamEditor'
 
 const statusLabels={reviewed:'Reviewed','review-needed':'Review needed','no-evidence':'No evidence','approval-pending':'Approval pending',rejected:'Rejected'} as const
@@ -40,6 +41,7 @@ export default function ProjectKnowledgeRecord({project,onUpdate}:{project:Proje
   <header className="knowledge-record-header"><div><p className="eyebrow">Sources</p><h2>Evidence and editing workbench.</h2><p>Uploaded material, factual review, Team input and Folion's draft stay visibly separate until you approve them.</p></div><span className={`knowledge-readiness ${status==='Ready for Studio'?'ready':''}`}>{status==='Ready for Studio'?<ShieldCheck/>:<AlertCircle/>}{status}</span></header>
 
   {status==='Ready for Studio'&&<div className="knowledge-reopen"><button onClick={reopenReview}><Undo2/> Reopen review</button></div>}
+  <ProjectAssetUploader project={safe}/>
   <ProjectGallery project={safe} mode="sources"/>
   <section className="project-settings"><div><p className="eyebrow">Project settings</p><h3>Confidentiality and permitted use</h3></div><ConfidentialityControl value={safe.confidentiality} onChange={confidentiality=>onUpdate({...safe,confidentiality,visibility:confidentiality==='publicly-publishable'?safe.visibility:'private'})} compact/>{workspaceRole==='owner'&&<button className="mt-6 flex items-center gap-2 text-xs text-red-800/70 hover:text-red-800" onClick={()=>{setDeleteConfirmation('');setDeleteError('');setDeleteOpen(true)}}><Trash2 size={14}/> Delete project</button>}</section>
   <ProjectTeamEditor team={safe.team} onChange={team=>onUpdate({...safe,team,knowledgeStatus:'Review needed'})}/>
