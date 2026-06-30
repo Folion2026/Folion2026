@@ -10,9 +10,10 @@ type Workspace={id:string;name:string;slug:string}
 type Membership={workspace_id:string;role:Role;workspaces:Workspace}
 
 const port=8787
-const supabaseUrl=process.env.SUPABASE_URL
+function projectOrigin(value:string|undefined){if(!value)return'';try{const parsed=new URL(value.trim());return parsed.protocol==='http:'||parsed.protocol==='https:'?parsed.origin:''}catch{return''}}
+const supabaseUrl=projectOrigin(process.env.SUPABASE_URL)
 const supabaseSecretKey=process.env.SUPABASE_SECRET_KEY
-if(!supabaseUrl||!supabaseSecretKey)throw new Error('SUPABASE_URL and SUPABASE_SECRET_KEY are required')
+if(!supabaseUrl||!supabaseSecretKey)throw new Error('SUPABASE_URL must be an absolute project URL and SUPABASE_SECRET_KEY is required')
 
 const admin=createClient(supabaseUrl,supabaseSecretKey,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}})
 
@@ -20,16 +21,17 @@ function reply(res:ServerResponse,status:number,body:unknown){res.writeHead(stat
 function fail(res:ServerResponse,status:number,message:string){reply(res,status,{error:message})}
 async function body(req:IncomingMessage):Promise<Json>{const chunks:Buffer[]=[];for await(const chunk of req){chunks.push(Buffer.from(chunk));if(chunks.reduce((sum,item)=>sum+item.length,0)>2_000_000)throw new Error('Request body is too large')}if(!chunks.length)return{};return JSON.parse(Buffer.concat(chunks).toString('utf8')) as Json}
 function bearer(req:IncomingMessage){const value=req.headers.authorization||'';return value.startsWith('Bearer ')?value.slice(7):''}
-async function authenticated(req:IncomingMessage){const token=bearer(req);if(!token)return null;const {data,error}=await admin.auth.getUser(token);if(error||!data.user)return null;return data.user}
+async function authenticated(req:IncomingMessage){const token=bearer(req);if(!token)return null;const {data,error}=await admin.auth.getUser(token);if(error){console.error('Supabase session validation failed',error);return null}return data.user||null}
 function slug(value:string){return value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,48)||'folion-workspace'}
 
 async function memberships(userId:string){const {data,error}=await admin.from('workspace_members').select('workspace_id,role,workspaces!inner(id,name,slug)').eq('user_id',userId);if(error)throw error;return(data||[]) as unknown as Membership[]}
 async function ensureWorkspace(user:User):Promise<{workspace:Workspace;role:Role}>{
- await admin.from('profiles').upsert({id:user.id,email:user.email||'',display_name:user.user_metadata?.display_name||user.email?.split('@')[0]||''})
+ const {error:profileError}=await admin.from('profiles').upsert({id:user.id,email:user.email||'',display_name:user.user_metadata?.display_name||user.email?.split('@')[0]||''});if(profileError)throw profileError
  const existing=await memberships(user.id)
  if(existing[0])return{workspace:existing[0].workspaces,role:existing[0].role}
+ const {data:ownedWorkspace,error:ownedError}=await admin.from('workspaces').select('id,name,slug').eq('created_by',user.id).order('created_at',{ascending:true}).limit(1).maybeSingle();if(ownedError)throw ownedError
  const name='Folion Workspace';const workspaceSlug=`${slug(name)}-${user.id.slice(0,8)}`
- let {data:workspace,error}=await admin.from('workspaces').insert({name,slug:workspaceSlug,created_by:user.id}).select('id,name,slug').single();if(error?.code==='23505'){const existingWorkspace=await admin.from('workspaces').select('id,name,slug').eq('slug',workspaceSlug).single();workspace=existingWorkspace.data;error=existingWorkspace.error}if(error||!workspace)throw error||new Error('Unable to create workspace')
+ let workspace=ownedWorkspace;let error=null;if(!workspace){const created=await admin.from('workspaces').insert({name,slug:workspaceSlug,created_by:user.id}).select('id,name,slug').single();workspace=created.data;error=created.error;if(error?.code==='23505'){const prior=await admin.from('workspaces').select('id,name,slug').eq('slug',workspaceSlug).eq('created_by',user.id).single();workspace=prior.data;error=prior.error}}if(error||!workspace)throw error||new Error('Unable to create workspace')
  const {error:memberError}=await admin.from('workspace_members').upsert({workspace_id:workspace.id,user_id:user.id,role:'owner',invited_email:user.email||'',accepted_at:new Date().toISOString()},{onConflict:'workspace_id,user_id'});if(memberError)throw memberError
  await audit(workspace.id,user.id,'workspace.created','workspace',workspace.id,{})
  return{workspace:workspace as Workspace,role:'owner'}
