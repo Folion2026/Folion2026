@@ -85,11 +85,11 @@ async function route(req:IncomingMessage,res:ServerResponse){
   return reply(res,201,{seeded:true})
  }
  if(req.method==='POST'&&path==='/api/v1/people'){
-  const input=await body(req);const workspaceId=String(input.workspaceId||'');await requireRole(user,workspaceId,['owner','editor']);const value=(input.person||{}) as Json;const name=String(value.name||'').trim();if(!name)return fail(res,400,'Person name is required')
+  const input=await body(req);const {workspace,role}=await ensureWorkspace(user);if(!['owner','editor'].includes(role))return fail(res,403,'You do not have permission to add people to this workspace');const workspaceId=workspace.id;const value=(input.person||{}) as Json;const name=String(value.name||'').trim();if(!name)return fail(res,400,'Person name is required')
   const row={workspace_id:workspaceId,id:crypto.randomUUID(),name,position:String(value.position||'').trim(),office:String(value.office||'').trim(),email:String(value.email||'').trim(),bio:String(value.bio||'').trim(),skills:Array.isArray(value.skills)?value.skills.map(item=>String(item).trim()).filter(Boolean):[],data:{}}
   const {data,error}=await admin.from('people').insert(row).select('id,name,position,office,email,bio,skills').single();if(error)throw error
   await audit(workspaceId,user.id,'person.created','person',row.id,{})
-  return reply(res,201,{person:data})
+  return reply(res,201,{person:data,workspace,role})
  }
  const projectMatch=path.match(/^\/api\/v1\/projects\/([^/]+)$/)
  if(req.method==='POST'&&path==='/api/v1/projects'){
