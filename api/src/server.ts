@@ -84,6 +84,13 @@ async function route(req:IncomingMessage,res:ServerResponse){
   await audit(workspace.id,user.id,'workspace.seeded','workspace',workspace.id,{projects:Array.isArray(input.projects)?input.projects.length:0,people:people.length})
   return reply(res,201,{seeded:true})
  }
+ if(req.method==='POST'&&path==='/api/v1/people'){
+  const input=await body(req);const workspaceId=String(input.workspaceId||'');await requireRole(user,workspaceId,['owner','editor']);const value=(input.person||{}) as Json;const name=String(value.name||'').trim();if(!name)return fail(res,400,'Person name is required')
+  const row={workspace_id:workspaceId,id:crypto.randomUUID(),name,position:String(value.position||'').trim(),office:String(value.office||'').trim(),email:String(value.email||'').trim(),bio:String(value.bio||'').trim(),skills:Array.isArray(value.skills)?value.skills.map(item=>String(item).trim()).filter(Boolean):[],data:{}}
+  const {data,error}=await admin.from('people').insert(row).select('id,name,position,office,email,bio,skills').single();if(error)throw error
+  await audit(workspaceId,user.id,'person.created','person',row.id,{})
+  return reply(res,201,{person:data})
+ }
  const projectMatch=path.match(/^\/api\/v1\/projects\/([^/]+)$/)
  if(req.method==='POST'&&path==='/api/v1/projects'){
   const input=await body(req);const workspaceId=String(input.workspaceId||'');await requireRole(user,workspaceId,['owner','editor']);await saveProject(workspaceId,user,input.project as Json);return reply(res,201,{project:input.project})
