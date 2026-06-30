@@ -1,0 +1,18 @@
+{
+  "name": "folion-ingestion-worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/worker.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.4",
+    "pdfjs-dist": "^5.4.149"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "typescript": "^5.8.3"
+  }
+}

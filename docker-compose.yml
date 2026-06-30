@@ -5,7 +5,6 @@ services:
     environment:
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
       GEMINI_MODEL: ${GEMINI_MODEL}
     expose:
       - "8787"
@@ -15,6 +14,16 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
+
+  worker:
+    build:
+      context: ./worker
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL}
+    restart: unless-stopped
 
   folion:
     build:

@@ -9,6 +9,7 @@ import ConfidentialityControl from './ConfidentialityControl'
 import ProjectGallery from './ProjectGallery'
 import ProjectAssetUploader from './ProjectAssetUploader'
 import ProjectTeamEditor from './ProjectTeamEditor'
+import EvidenceIngestionPanel from './EvidenceIngestionPanel'
 
 const statusLabels={reviewed:'Reviewed','review-needed':'Review needed','no-evidence':'No evidence','approval-pending':'Approval pending',rejected:'Rejected'} as const
 const sourceLabels={'uploaded-asset':'Uploaded asset','team-input':'Team input'} as const
@@ -43,6 +44,7 @@ export default function ProjectKnowledgeRecord({project,onUpdate}:{project:Proje
   {status==='Ready for Studio'&&<div className="knowledge-reopen"><button onClick={reopenReview}><Undo2/> Reopen review</button></div>}
   <ProjectAssetUploader project={safe}/>
   <ProjectGallery project={safe} mode="sources"/>
+  <EvidenceIngestionPanel project={safe}/>
   <section className="project-settings"><div><p className="eyebrow">Project settings</p><h3>Confidentiality and permitted use</h3></div><ConfidentialityControl value={safe.confidentiality} onChange={confidentiality=>onUpdate({...safe,confidentiality,visibility:confidentiality==='publicly-publishable'?safe.visibility:'private'})} compact/>{workspaceRole==='owner'&&<button className="mt-6 flex items-center gap-2 text-xs text-red-800/70 hover:text-red-800" onClick={()=>{setDeleteConfirmation('');setDeleteError('');setDeleteOpen(true)}}><Trash2 size={14}/> Delete project</button>}</section>
   <ProjectTeamEditor team={safe.team} onChange={team=>onUpdate({...safe,team,knowledgeStatus:'Review needed'})}/>
 

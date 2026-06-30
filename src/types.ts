@@ -13,6 +13,18 @@ export interface PlaceFramework{name:string;elements:string[]}
 export interface StudioAssets{shortSummary:string;capabilityStatement:string;tenderParagraph:string}
 export interface SearchIntelligence{keywords:string[];concepts:string[];searchQuestionsThisProjectShouldAnswer:string[]}
 export interface Evidence{field:string;source:string;page:number|null;confidence:number|null}
+export type EvidenceCategory='project_identity'|'scale'|'practice_role'|'place_context'|'design_response'|'outcomes_relevance'|'tags_themes'
+export type IngestionJobStatus='queued'|'extracting_text'|'analysing'|'validating'|'ready_for_review'|'failed'
+export interface EvidenceSource{id:string;source_asset_id:string;source_page:number;exact_evidence_quote:string}
+export interface EvidenceCandidate{id:string;extraction_job_id:string;category:EvidenceCategory;field:string;value:string;status:'review_needed'|'accepted'|'rejected'|'superseded';source_type:'document'|'manual_refinement';conflict_group_id?:string|null;original_extracted_value?:string|null;created_at:string;sources:EvidenceSource[]}
+export interface ApprovedEvidenceItem{id:string;category:EvidenceCategory;field:string;value:string;sourceType:'document'|'manual_refinement';originalExtractedValue?:string;approvedAt?:string;sourceAssetId?:string;sourcePage?:number;exactEvidenceQuote?:string}
+export type NarrativeSectionType='project_summary'|'challenge_opportunity'|'response'|'outcome_future_relevance'
+export type NarrativeBasisType='source_supported'|'team_input'|'mixed'
+export interface IngestionNarrative{id:string;extraction_job_id:string;section_type:NarrativeSectionType;draft_text:string;approved_text?:string|null;basis_type:NarrativeBasisType;status:'draft'|'approved'|'rejected'|'superseded';created_at:string}
+export interface ApprovedNarrativeSection{id:string;sectionType:NarrativeSectionType;text:string;basisType:NarrativeBasisType;approvedAt?:string}
+export interface IngestionJob{id:string;source_asset_id:string;status:IngestionJobStatus;failure_reason?:string|null;model_name?:string|null;created_at:string;started_at?:string|null;completed_at?:string|null}
+export interface SourcePage{id:string;extraction_job_id:string;source_asset_id:string;page_number:number;extracted_text:string;character_count:number;created_at:string}
+export interface IngestionWorkspace{jobs:IngestionJob[];pages:SourcePage[];items:EvidenceCandidate[];narratives:IngestionNarrative[]}
 export type KnowledgeReviewStatus='reviewed'|'review-needed'|'no-evidence'|'approval-pending'|'rejected'
 export type KnowledgeReleaseStatus='Review needed'|'Ready for Studio'
 export type KnowledgeSourceType='uploaded-asset'|'team-input'
@@ -23,6 +35,6 @@ export type DraftBasis='facts'|'team'|'both'
 export type DraftKey='summary'|'challenge'|'response'|'outcome'
 export interface FolionDraftSection{key:DraftKey;label:string;value:string;approved:boolean;basis:DraftBasis}
 export interface ProjectKnowledge{facts:KnowledgeFact[];teamInput:TeamInput;draft:FolionDraftSection[]}
-export interface Project{id:string;projectName:string;visibility:Visibility;confidentiality:ProjectConfidentiality;status:string;knowledgeStatus?:KnowledgeReleaseStatus;company:string;location:string;address?:string[];sector:string;projectType?:string[];proposal?:string;precincts?:string[];siteContext?:string[];placeStrategy?:string[];scope?:string;year:string;client:string;siteArea:string;gfa:string;height:string;identity?:ProjectIdentity;metrics?:ProjectMetrics;opportunity?:KnowledgeItem[];challenges?:KnowledgeItem[];designResponse?:KnowledgeItem[];outcome?:ProjectOutcome;whyItMatters?:string;lessonsLearned?:string[];placeFramework?:PlaceFramework;studioAssets?:StudioAssets;searchIntelligence?:SearchIntelligence;evidence?:Evidence[];knowledge?:ProjectKnowledge;services:string[];team:TeamMember[];story:Story;reflection?:ProjectReflection;assets:Asset[];tags:string[];coverImage:string}
+export interface Project{id:string;projectName:string;visibility:Visibility;confidentiality:ProjectConfidentiality;status:string;knowledgeStatus?:KnowledgeReleaseStatus;company:string;location:string;address?:string[];sector:string;projectType?:string[];proposal?:string;precincts?:string[];siteContext?:string[];placeStrategy?:string[];scope?:string;year:string;client:string;siteArea:string;gfa:string;height:string;identity?:ProjectIdentity;metrics?:ProjectMetrics;opportunity?:KnowledgeItem[];challenges?:KnowledgeItem[];designResponse?:KnowledgeItem[];outcome?:ProjectOutcome;whyItMatters?:string;lessonsLearned?:string[];placeFramework?:PlaceFramework;studioAssets?:StudioAssets;searchIntelligence?:SearchIntelligence;evidence?:Evidence[];knowledge?:ProjectKnowledge;approvedEvidence?:ApprovedEvidenceItem[];approvedNarratives?:ApprovedNarrativeSection[];services:string[];team:TeamMember[];story:Story;reflection?:ProjectReflection;assets:Asset[];tags:string[];coverImage:string}
 export interface Collection{id:string;name:string;description:string;projectIds:string[]}
 export interface Person{id:string;name:string;position:string;office:string;email:string;bio:string;skills:string[]}
