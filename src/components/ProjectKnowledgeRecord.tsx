@@ -3,7 +3,7 @@ import {useState} from 'react'
 import {useNavigate} from 'react-router-dom'
 import {isKnowledgeReviewResolved,normalizeProject,projectKnowledgeStatus} from '../lib/project'
 import {useStore} from '../store'
-import {FolionDraftSection,KnowledgeFact,KnowledgeFactKey,Project,ProjectKnowledge,TeamInput} from '../types'
+import {KnowledgeFact,KnowledgeFactKey,Project,ProjectKnowledge,TeamInput} from '../types'
 import {Button,Modal} from './ui'
 import ConfidentialityControl from './ConfidentialityControl'
 import ProjectGallery from './ProjectGallery'
@@ -18,7 +18,6 @@ const teamFields:{key:keyof TeamInput;label:string;prompt:string}[]=[
  {key:'teamResponse',label:'Team response',prompt:'What did the team do in response?'},
  {key:'futureRelevance',label:'Future relevance',prompt:'Why is this project relevant to future work?'},
 ]
-const basisLabels={facts:'Based on reviewed project facts',team:'Informed by team input',both:'Based on both'} as const
 
 export default function ProjectKnowledgeRecord({project,onUpdate}:{project:Project;onUpdate:(project:Project)=>void}){
  const navigate=useNavigate();const {workspaceRole,deleteProject}=useStore();const safe=normalizeProject(project);const [editingKey,setEditingKey]=useState<KnowledgeFactKey|null>(null);const [editValue,setEditValue]=useState('');const [deleteOpen,setDeleteOpen]=useState(false);const [deleteConfirmation,setDeleteConfirmation]=useState('');const [deleteError,setDeleteError]=useState('');const [deleting,setDeleting]=useState(false)
@@ -33,7 +32,6 @@ export default function ProjectKnowledgeRecord({project,onUpdate}:{project:Proje
  const beginEdit=(fact:KnowledgeFact)=>{setEditingKey(fact.key);setEditValue(fact.value)}
  const editAndAccept=(fact:KnowledgeFact)=>{updateFact(fact.key,{value:editValue.trim(),status:editValue.trim()?'reviewed':'no-evidence',sourceType:editValue.trim()?'team-input':null,assetId:undefined,assetName:undefined});setEditingKey(null)}
  const updateTeamInput=(key:keyof TeamInput,value:string)=>saveKnowledge({...knowledge,teamInput:{...knowledge.teamInput,[key]:value}})
- const updateDraft=(key:FolionDraftSection['key'],patch:Partial<FolionDraftSection>)=>saveKnowledge({...knowledge,draft:knowledge.draft.map(section=>section.key===key?{...section,...patch}:section)})
  const markReady=()=>onUpdate({...safe,knowledgeStatus:'Ready for Studio'})
  const reopenReview=()=>onUpdate({...safe,knowledgeStatus:'Review needed'})
  const keepReviewing=()=>document.querySelector<HTMLElement>('.knowledge-review-section')?.scrollIntoView({behavior:'smooth',block:'start'})
@@ -51,7 +49,6 @@ export default function ProjectKnowledgeRecord({project,onUpdate}:{project:Proje
 
   <section className="knowledge-review-section"><div className="knowledge-review-heading"><div><p className="eyebrow">Team Input</p><h3>What the files cannot tell us</h3></div><p>Optional editorial context from the team. It is never presented as uploaded-source evidence.</p></div><div className="team-input-editor">{teamFields.map(field=><label key={field.key}><span>{field.label}</span><strong>{field.prompt}</strong><textarea value={knowledge.teamInput[field.key]} onChange={event=>updateTeamInput(field.key,event.target.value)} placeholder="Write only what the team knows. Leave blank if it is not useful here."/><small>Autosaved locally · Team input</small></label>)}</div></section>
 
-  <section className="knowledge-review-section"><div className="knowledge-review-heading"><div><p className="eyebrow">Folion Draft</p><h3>Proposed articulation</h3></div><p>Editable narrative for reuse. A draft remains outside Studio until it is approved.</p></div><div className="folion-draft-list">{knowledge.draft.map(section=><article key={section.key}><div><strong>{section.label}</strong><span>{basisLabels[section.basis]}</span></div><textarea value={section.value} onChange={event=>updateDraft(section.key,{value:event.target.value,approved:false})} placeholder="Omitted until a source-supported or team-provided articulation is available."/><button className={section.approved?'approved':''} disabled={!section.value.trim()} onClick={()=>updateDraft(section.key,{approved:!section.approved})}>{section.approved?<><ShieldCheck/> Approved for Studio</>:<><Check/> Approve draft</>}</button></article>)}</div></section>
   <ProjectTeamEditor team={safe.team} onChange={team=>onUpdate({...safe,team,knowledgeStatus:'Review needed'})}/>
   <section className="project-settings"><div><p className="eyebrow">Project settings and readiness</p><h3>Confidentiality and permitted use</h3></div><ConfidentialityControl value={safe.confidentiality} onChange={confidentiality=>onUpdate({...safe,confidentiality,visibility:confidentiality==='publicly-publishable'?safe.visibility:'private'})} compact/>{workspaceRole==='owner'&&<button className="mt-6 flex items-center gap-2 text-xs text-red-800/70 hover:text-red-800" onClick={()=>{setDeleteConfirmation('');setDeleteError('');setDeleteOpen(true)}}><Trash2 size={14}/> Delete project</button>}</section>
   {reviewResolved&&<aside className={`knowledge-release-panel ${status==='Ready for Studio'?'released':''}`} aria-live="polite">{status==='Ready for Studio'?<><CheckCircle2/><div><p className="eyebrow">Editorial release</p><h3>Project ready for Studio</h3><p>Approved knowledge can now be used in Project Sheet, Tender Response, Pitch Deck and CV Package.</p></div><div className="knowledge-release-actions"><Button onClick={()=>navigate('/studio')}>Open Studio <ArrowRight/></Button><button onClick={()=>navigate(`/projects/${safe.id}`)}>Return to project</button></div></>:<><ShieldCheck/><div><p className="eyebrow">Review sign-off</p><h3>All selected knowledge has been reviewed.</h3><p>Release the approved facts and narrative for deliberate reuse in Studio.</p></div><div className="knowledge-release-actions"><Button onClick={markReady}>Mark ready for Studio <ArrowRight/></Button><button onClick={keepReviewing}>Keep reviewing</button></div></>}</aside>}

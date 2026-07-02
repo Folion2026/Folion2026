@@ -8,7 +8,7 @@ type PageRecord={id:string;page_number:number;extracted_text:string;normalised_t
 type Candidate={category:string;field:string;value:string;source_page:number;exact_evidence_quote:string}
 type Fact={id:string;category:string;field:string;structured_field:string|null;value:string;status:string;sources?:unknown[]}
 type Draft={text:string;basis_type:'source_supported'|'team_input'|'mixed';source_fact_ids:string[];team_input_refs:string[]}
-type Articulation={project_summary:Draft;challenge_opportunity:Draft;distinctive_response:Draft;precedent_relevance:Draft;project_narrative:Draft}
+type ProjectText={project_summary:Draft;project_narrative:Draft}
 
 const supabaseUrl=process.env.SUPABASE_URL?.trim()||''
 const supabaseSecretKey=process.env.SUPABASE_SECRET_KEY?.trim()||''
@@ -19,14 +19,14 @@ const admin=createClient(supabaseUrl,supabaseSecretKey,{auth:{persistSession:fal
 
 const categories=new Set(['project_identity','scale','practice_role','place_context','design_response','outcomes_relevance','tags_themes'])
 const basisTypes=new Set(['source_supported','team_input','mixed'])
-const sectionTypes=['project_summary','challenge_opportunity','distinctive_response','precedent_relevance','project_narrative'] as const
+const sectionTypes=['project_summary','project_narrative'] as const
 const teamRefs=new Set(['challenge_or_opportunity_input','response_input','future_relevance_input'])
 const teamRefToKey:Record<string,string>={challenge_or_opportunity_input:'challengeOpportunity',response_input:'teamResponse',future_relevance_input:'futureRelevance'}
 const activeStatuses=['queued','extracting_text','analysing','validating']
 const emptyPdfMessage='This PDF does not contain readable text yet. Scanned-document support is not available in this version.'
 const largePdfMessage='This document is too large for analysis in this version. Please use a shorter report or split it into sections.'
 const genericFailure='Folion could not analyse this document. Try again or check the file.'
-const articulationFailure='Folion could not prepare the proposed articulation. Try again once source review is complete.'
+const articulationFailure='Folion could not prepare the project text. Try again once the project information is ready.'
 class UserError extends Error{}
 const audit=async(job:Job,action:string,metadata:Json={})=>{await admin.from('audit_events').insert({workspace_id:job.workspace_id,actor_user_id:job.created_by,action,entity_type:'ingestion_job',entity_id:job.id,metadata:{projectId:job.project_id,sourceAssetId:job.source_asset_id,...metadata}})}
 
@@ -51,8 +51,8 @@ async function extract(pageText:string){
  return raw.candidate_facts.map(item=>{if(!item||typeof item!=='object')throw new UserError(genericFailure);const row=item as Json;const result={category:String(row.category||''),field:String(row.field||'').trim(),value:String(row.value||'').trim(),source_page:Number(row.source_page),exact_evidence_quote:String(row.exact_evidence_quote||'').trim()};if(!categories.has(result.category)||!result.field||!result.value||!Number.isInteger(result.source_page)||result.source_page<1||!result.exact_evidence_quote)throw new UserError(genericFailure);return result})
 }
 
-function validateArticulation(value:unknown,allowedIds:Set<string>):Articulation{
- if(!value||typeof value!=='object')throw new UserError(articulationFailure);const raw=value as Json;const result={} as Articulation
+function validateProjectText(value:unknown,allowedIds:Set<string>):ProjectText{
+ if(!value||typeof value!=='object')throw new UserError(articulationFailure);const raw=value as Json;const result={} as ProjectText
  for(const key of sectionTypes){const value=raw[key];if(!value||typeof value!=='object')throw new UserError(articulationFailure);const row=value as Json;const text=String(row.text||'').trim();const basis=String(row.basis_type||'');const ids=Array.isArray(row.source_fact_ids)?row.source_fact_ids.map(String):[];const refs=Array.isArray(row.team_input_refs)?row.team_input_refs.map(String):[];if(!text||!basisTypes.has(basis)||ids.some(id=>!allowedIds.has(id))||refs.some(ref=>!teamRefs.has(ref)))throw new UserError(articulationFailure);result[key]={text,basis_type:basis as Draft['basis_type'],source_fact_ids:[...new Set(ids)],team_input_refs:[...new Set(refs)]}}
  return result
 }
@@ -68,8 +68,8 @@ async function projectPacket(job:Job,includeReviewable:boolean){
 
 async function synthesize(job:Job,includeReviewable:boolean){
  const packet=await projectPacket(job,includeReviewable);if(!packet.facts.length&&!packet.manualFacts.length&&!Object.values(packet.teamInput).some(Boolean))throw new UserError(articulationFailure)
- const prompt=`You are Folion's evidence-led project synthesis engine. Return strict JSON only using the required five-section schema. Create a genuinely project-specific synthesis, not a copy, concatenation or grammar-only rewrite of Team Input. Project Summary is factual and may use only source-supported or approved manual facts. Team Input is strategic context, never verified factual evidence. Every factual assertion must cite source_fact_ids. Use fewer words rather than generic filler. Project Summary target 60-120 words; Project Narrative target 120-220 words where evidence supports it. Avoid generic praise and never invent outcomes, delivery, awards, people, roles, status, metrics or success. The Project Narrative must flow from challenge to distinctive response to precedent relevance.\n\nProject knowledge packet:\n${JSON.stringify({project_name:packet.project.project_name,validated_source_supported_facts:packet.facts,approved_manual_project_facts:packet.manualFacts,original_team_input:packet.teamInput})}`
- const output=validateArticulation(await gemini(prompt,articulationSchema,articulationFailure),new Set(packet.facts.map(item=>item.id)))
+ const prompt=`You are Folion's evidence-led project writing engine. Return strict JSON containing only project_summary and project_narrative. Reason internally through the challenge, response, distinctive strength and future relevance, but never expose those as separate outputs. Write new, project-specific professional language: do not copy report sentences, concatenate Team Input, or merely grammar-correct it. Project Summary should orient an unfamiliar reader to what the project is, why the practice was engaged, its place, type, relevant scale, core condition and practice role; target 80-140 words where supported. Project Narrative must be one coherent strategic story answering what was at stake, what the team did, what was distinctive, and why the project is useful precedent; target 140-240 words where supported. Project Summary may use only source-supported or approved manual facts. Team Input is strategic context, never verified factual evidence. Every factual assertion must cite source_fact_ids. Use fewer words rather than filler. Avoid generic praise and never invent outcomes, delivery, awards, people, roles, status, metrics, client satisfaction or success.\n\nProject knowledge packet:\n${JSON.stringify({project_name:packet.project.project_name,validated_source_supported_facts:packet.facts,approved_manual_project_facts:packet.manualFacts,original_team_input:packet.teamInput})}`
+ const output=validateProjectText(await gemini(prompt,articulationSchema,articulationFailure),new Set(packet.facts.map(item=>item.id)))
  const {data:prior,error:priorError}=await admin.from('narrative_sections').select('id,section_type,version').eq('workspace_id',job.workspace_id).eq('project_id',job.project_id).order('version',{ascending:false});if(priorError)throw priorError;const latest=new Map<string,{id:string;version:number}>();for(const row of prior||[])if(!latest.has(row.section_type))latest.set(row.section_type,{id:row.id,version:row.version||1})
  const rows=sectionTypes.map(section_type=>{const value=output[section_type],previous=latest.get(section_type);return{workspace_id:job.workspace_id,project_id:job.project_id,extraction_job_id:job.id,section_type,draft_text:value.text,basis_type:value.basis_type,supporting_item_ids:value.source_fact_ids,team_input_keys:value.team_input_refs.map(ref=>teamRefToKey[ref]),version:(previous?.version||0)+1,supersedes_id:previous?.id||null,status:'draft',needs_refresh:false,stale_reason:null,created_by:job.created_by}})
  const {error}=await admin.from('narrative_sections').insert(rows);if(error)throw error;return rows.length
