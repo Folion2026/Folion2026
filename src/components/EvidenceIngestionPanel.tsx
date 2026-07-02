@@ -10,7 +10,7 @@ const activeStatuses=new Set(['queued','extracting_text','analysing','validating
 const statusLabels:Record<string,string>={queued:'Processing',extracting_text:'Processing',analysing:'Processing',validating:'Processing',ready_for_review:'Ready for review',failed:'Failed'}
 const categoryLabels:Record<string,string>={project_identity:'Project identity',scale:'Scale',practice_role:'Practice role',place_context:'Place and context',design_response:'Design response',outcomes_relevance:'Outcomes and future relevance',tags_themes:'Tags and themes'}
 const basisLabels:Record<string,string>={source_supported:'Source-supported',team_input:'Team Input',mixed:'Mixed'}
-const sectionLabels:Record<string,string>={project_summary:'Project summary',challenge_opportunity:'Challenge or opportunity',response:'Response',outcome_future_relevance:'Outcome / future relevance',distinctive_response:'Distinctive response',precedent_strength:'Precedent strength',future_relevance:'Future relevance'}
+const sectionLabels:Record<string,string>={project_summary:'Project summary',challenge_opportunity:'Challenge or opportunity',response:'Response',outcome_future_relevance:'Outcome / future relevance',distinctive_response:'Distinctive response',precedent_strength:'Precedent strength',future_relevance:'Future relevance',precedent_relevance:'Precedent strength and future relevance',project_narrative:'Project narrative'}
 const isPdf=(asset:Asset)=>asset.mimeType==='application/pdf'||/\.pdf(?:$|[?#])/i.test(asset.fileName||asset.title||asset.url)
 
 export default function EvidenceIngestionPanel({project}:{project:Project}){

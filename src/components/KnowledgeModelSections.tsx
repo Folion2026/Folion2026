@@ -13,7 +13,7 @@ function Facts({title,facts}:{title:string;facts:KnowledgeFact[]}){if(!facts.len
 export default function KnowledgeModelSections({project}:{project?:Project|null}){
  const safe=normalizeProject(project);if(!safe)return null
  const drafts=approvedDraftSections(safe);const summary=drafts.find(section=>section.key==='summary'&&section.basis!=='team')?.value
- const narrativeOrder=['Challenge or opportunity','Distinctive response','Response','Precedent strength','Future relevance','Outcome / future relevance'];const narrative=drafts.filter(section=>section.key!=='summary').sort((a,b)=>narrativeOrder.indexOf(a.label)-narrativeOrder.indexOf(b.label)).map(section=>section.value.trim()).filter(Boolean)
+ const narrativeDraft=drafts.find(section=>section.label==='Project narrative');const narrativeOrder=['Challenge or opportunity','Distinctive response','Response','Precedent strength and future relevance','Precedent strength','Future relevance','Outcome / future relevance'];const narrative=narrativeDraft?[narrativeDraft.value.trim()].filter(Boolean):drafts.filter(section=>section.key!=='summary').sort((a,b)=>narrativeOrder.indexOf(a.label)-narrativeOrder.indexOf(b.label)).map(section=>section.value.trim()).filter(Boolean)
  const facts=reviewedKnowledgeFacts(safe);const used=new Set<string>();const uniqueFacts=facts.filter(fact=>{const key=`${fact.key}|${fact.value}`;if(used.has(key))return false;used.add(key);return true})
  const hasFacts=uniqueFacts.length>0||safe.team.length>0
  if(!summary&&!hasFacts&&!narrative.length)return <div className="approved-knowledge-empty" aria-label="No approved project knowledge"/>
