@@ -20,7 +20,7 @@ export interface EvidenceCandidate{id:string;extraction_job_id:string;category:E
 export interface ApprovedEvidenceItem{id:string;category:EvidenceCategory;field:string;value:string;sourceType:'document'|'manual_refinement';originalExtractedValue?:string;approvedAt?:string;sourceAssetId?:string;sourcePage?:number;exactEvidenceQuote?:string}
 export type NarrativeSectionType='project_summary'|'challenge_opportunity'|'response'|'outcome_future_relevance'
 export type NarrativeBasisType='source_supported'|'team_input'|'mixed'
-export interface IngestionNarrative{id:string;extraction_job_id:string;section_type:NarrativeSectionType;draft_text:string;approved_text?:string|null;basis_type:NarrativeBasisType;status:'draft'|'approved'|'rejected'|'superseded';created_at:string}
+export interface IngestionNarrative{id:string;extraction_job_id:string;section_type:NarrativeSectionType;draft_text:string;approved_text?:string|null;basis_type:NarrativeBasisType;supporting_item_ids?:string[];status:'draft'|'approved'|'rejected'|'superseded';created_at:string}
 export interface ApprovedNarrativeSection{id:string;sectionType:NarrativeSectionType;text:string;basisType:NarrativeBasisType;approvedAt?:string}
 export interface IngestionJob{id:string;source_asset_id:string;status:IngestionJobStatus;failure_reason?:string|null;model_name?:string|null;created_at:string;started_at?:string|null;completed_at?:string|null}
 export interface SourcePage{id:string;extraction_job_id:string;source_asset_id:string;page_number:number;extracted_text:string;character_count:number;created_at:string}
