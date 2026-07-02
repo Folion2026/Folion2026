@@ -4,13 +4,14 @@ import {useNavigate,useParams} from 'react-router-dom'
 import {useAuth} from '../auth'
 import {Button} from '../components/ui'
 import {apiRequest} from '../lib/api'
+import {createUuid} from '../lib/id'
 import {approvedDraftSections,projectKnowledgeStatus,reviewedKnowledgeFacts} from '../lib/project'
 import {useStore} from '../store'
 import {Project,StudioPackage,StudioPackageMode,StudioPackageType,StudioSection} from '../types'
 
 const titles:Record<StudioPackageType,string>={single_project_sheet:'Single Project Sheet',project_collection:'Project Collection',pitch:'Pitch Package',cv:'CV Package',tender:'Tender Response Package'}
 const trace=(type:string,id:string,project:Project)=>({sourceType:type,sourceId:id,sourceProjectId:project.id,sourceStatus:'approved',confidentialityStatus:project.confidentiality})
-const section=(type:string,title:string,body:string,sources:StudioSection['sources']=[],status:StudioSection['status']='draft'):StudioSection=>({id:crypto.randomUUID(),sectionType:type,sectionOrder:0,title,body,status,sources})
+const section=(type:string,title:string,body:string,sources:StudioSection['sources']=[],status:StudioSection['status']='draft'):StudioSection=>({id:createUuid(),sectionType:type,sectionOrder:0,title,body,status,sources})
 function projectSheet(project:Project){const facts=reviewedKnowledgeFacts(project),drafts=approvedDraftSections(project),summary=drafts.find(item=>item.key==='summary')?.value||'',narrative=drafts.find(item=>item.label==='Project narrative')?.value||'';return[
  section('project_identity',project.projectName,[project.location,project.sector,project.status,project.year].filter(Boolean).join(' · '),[trace('approved_project',project.id,project)]),
  section('project_summary','Project Summary',summary,[trace('approved_project_summary',project.id,project)]),

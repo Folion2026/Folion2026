@@ -8,6 +8,7 @@ import ProjectGallery from '../components/ProjectGallery'
 import ProjectTeamEditor from '../components/ProjectTeamEditor'
 import {Button,Modal} from '../components/ui'
 import {apiRequest} from '../lib/api'
+import {createStableId} from '../lib/id'
 import {FALLBACK_PROJECT_IMAGE,normalizeProject} from '../lib/project'
 import {ProjectAssetUpload,useStore} from '../store'
 import {Asset,AssetType,IngestionWorkspace,Project,ProjectConfidentiality,ProjectCreationStep,TeamInput} from '../types'
@@ -30,8 +31,6 @@ const uploadCategories:{type:AssetType;label:string;description:string;accept:st
 const emptyTeamInput:TeamInput={challengeOpportunity:'',teamResponse:'',futureRelevance:''}
 const emptyIngestion:IngestionWorkspace={jobs:[],pages:[],items:[],narratives:[]}
 const confidentialityValues=new Set<ProjectConfidentiality>(['internal-only','externally-shareable','publicly-publishable'])
-let fallbackId=0
-function createStableId(prefix:string){if(typeof globalThis.crypto?.randomUUID==='function')return`${prefix}-${globalThis.crypto.randomUUID()}`;fallbackId+=1;return`${prefix}-${Date.now().toString(36)}-${fallbackId.toString(36)}-${Math.random().toString(36).slice(2,10)}`}
 
 export default function NewProject(){
  const navigate=useNavigate();const [searchParams,setSearchParams]=useSearchParams();const {session}=useAuth();const {projects,workspace,addProject,saveProjectDraft,updateProject,uploadProjectAssets,reload}=useStore()
