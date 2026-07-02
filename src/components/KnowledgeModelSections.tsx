@@ -13,7 +13,7 @@ function Facts({title,facts}:{title:string;facts:KnowledgeFact[]}){if(!facts.len
 export default function KnowledgeModelSections({project}:{project?:Project|null}){
  const safe=normalizeProject(project);if(!safe)return null
  const drafts=approvedDraftSections(safe);const summary=drafts.find(section=>section.key==='summary'&&section.basis!=='team')?.value
- const narrative=drafts.filter(section=>section.key!=='summary').map(section=>section.value.trim()).filter(Boolean)
+ const narrativeOrder=['Challenge or opportunity','Distinctive response','Response','Precedent strength','Future relevance','Outcome / future relevance'];const narrative=drafts.filter(section=>section.key!=='summary').sort((a,b)=>narrativeOrder.indexOf(a.label)-narrativeOrder.indexOf(b.label)).map(section=>section.value.trim()).filter(Boolean)
  const facts=reviewedKnowledgeFacts(safe);const used=new Set<string>();const uniqueFacts=facts.filter(fact=>{const key=`${fact.key}|${fact.value}`;if(used.has(key))return false;used.add(key);return true})
  const hasFacts=uniqueFacts.length>0||safe.team.length>0
  if(!summary&&!hasFacts&&!narrative.length)return <div className="approved-knowledge-empty" aria-label="No approved project knowledge"/>

@@ -18,11 +18,11 @@ export type IngestionJobStatus='queued'|'extracting_text'|'analysing'|'validatin
 export interface EvidenceSource{id:string;source_asset_id:string;source_page:number;exact_evidence_quote:string}
 export interface EvidenceCandidate{id:string;extraction_job_id:string;category:EvidenceCategory;field:string;value:string;status:'review_needed'|'accepted'|'rejected'|'superseded';source_type:'document'|'manual_refinement';conflict_group_id?:string|null;original_extracted_value?:string|null;created_at:string;sources:EvidenceSource[]}
 export interface ApprovedEvidenceItem{id:string;category:EvidenceCategory;field:string;value:string;sourceType:'document'|'manual_refinement';originalExtractedValue?:string;approvedAt?:string;sourceAssetId?:string;sourcePage?:number;exactEvidenceQuote?:string}
-export type NarrativeSectionType='project_summary'|'challenge_opportunity'|'response'|'outcome_future_relevance'
+export type NarrativeSectionType='project_summary'|'challenge_opportunity'|'response'|'outcome_future_relevance'|'distinctive_response'|'precedent_strength'|'future_relevance'
 export type NarrativeBasisType='source_supported'|'team_input'|'mixed'
-export interface IngestionNarrative{id:string;extraction_job_id:string;section_type:NarrativeSectionType;draft_text:string;approved_text?:string|null;basis_type:NarrativeBasisType;supporting_item_ids?:string[];status:'draft'|'approved'|'rejected'|'superseded';created_at:string}
+export interface IngestionNarrative{id:string;extraction_job_id:string;section_type:NarrativeSectionType;draft_text:string;approved_text?:string|null;basis_type:NarrativeBasisType;supporting_item_ids?:string[];team_input_keys?:Array<keyof TeamInput>;version?:number;supersedes_id?:string|null;status:'draft'|'approved'|'rejected'|'superseded';created_at:string}
 export interface ApprovedNarrativeSection{id:string;sectionType:NarrativeSectionType;text:string;basisType:NarrativeBasisType;approvedAt?:string}
-export interface IngestionJob{id:string;source_asset_id:string;status:IngestionJobStatus;failure_reason?:string|null;model_name?:string|null;created_at:string;started_at?:string|null;completed_at?:string|null}
+export interface IngestionJob{id:string;source_asset_id:string;narrative_only?:boolean;status:IngestionJobStatus;failure_reason?:string|null;model_name?:string|null;created_at:string;started_at?:string|null;completed_at?:string|null}
 export interface SourcePage{id:string;extraction_job_id:string;source_asset_id:string;page_number:number;extracted_text:string;character_count:number;created_at:string}
 export interface IngestionWorkspace{jobs:IngestionJob[];pages:SourcePage[];items:EvidenceCandidate[];narratives:IngestionNarrative[]}
 export type KnowledgeReviewStatus='reviewed'|'review-needed'|'no-evidence'|'approval-pending'|'rejected'
