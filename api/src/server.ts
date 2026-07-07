@@ -1087,12 +1087,13 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     const sourceId = String(input.sourceId || crypto.randomUUID());
     const filename = String(input.filename || "");
     const mimeType = String(input.mimeType || "");
+    const pastedText = String(input.pastedText || "").trim();
     const isPdf = mimeType === "application/pdf" && /\.pdf$/i.test(filename);
     const isDocx =
       mimeType ===
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document" &&
       /\.docx$/i.test(filename);
-    if (!isPdf && !isDocx)
+    if (!pastedText && !isPdf && !isDocx)
       return fail(
         res,
         415,
@@ -1104,11 +1105,12 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         id: sourceId,
         workspace_id: workspace.id,
         package_id: packageId,
-        source_type: isDocx ? "tender_docx" : "tender_pdf",
-        original_filename: filename,
-        mime_type: mimeType,
-        file_size: Number(input.fileSize) || null,
-        storage_path: String(input.storagePath || ""),
+        source_type: pastedText ? "tender_text" : isDocx ? "tender_docx" : "tender_pdf",
+        original_filename: pastedText ? "Pasted Tender Brief" : filename,
+        mime_type: pastedText ? "text/plain" : mimeType,
+        file_size: pastedText ? Buffer.byteLength(pastedText, "utf8") : Number(input.fileSize) || null,
+        storage_path: pastedText ? null : String(input.storagePath || ""),
+        source_text: pastedText || null,
         created_by: user.id,
       })
       .select("*")

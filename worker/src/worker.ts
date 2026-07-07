@@ -812,28 +812,35 @@ async function nextTenderJob() {
 async function processTenderJob(job: TenderJob) {
   const { data: source, error: sourceError } = await admin
     .from("package_sources")
-    .select("storage_path,file_size,source_type,mime_type")
+    .select("storage_path,file_size,source_type,mime_type,source_text")
     .eq("workspace_id", job.workspace_id)
     .eq("package_id", job.package_id)
     .eq("id", job.package_source_id)
     .single();
-  if (sourceError || !source?.storage_path) throw new UserError(genericFailure);
+  if (sourceError || !source) throw new UserError(genericFailure);
   if (
     typeof source.file_size === "number" &&
     source.file_size > 20 * 1024 * 1024
   )
     throw new UserError(largePdfMessage);
-  const { data: file, error: downloadError } = await admin.storage
-    .from("project-assets")
-    .download(source.storage_path);
-  if (downloadError || !file) throw new UserError(genericFailure);
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  let bytes = new Uint8Array();
+  if (source.source_type !== "tender_text") {
+    if (!source.storage_path) throw new UserError(genericFailure);
+    const { data: file, error: downloadError } = await admin.storage
+      .from("project-assets")
+      .download(source.storage_path);
+    if (downloadError || !file) throw new UserError(genericFailure);
+    bytes = new Uint8Array(await file.arrayBuffer());
+  }
   const pages: {
     page_number: number;
     extracted_text: string;
     character_count: number;
   }[] = [];
-  if (source.source_type === "tender_docx") {
+  if (source.source_type === "tender_text") {
+    const text = String(source.source_text || "").trim();
+    if (text) pages.push({ page_number: 1, extracted_text: text, character_count: text.length });
+  } else if (source.source_type === "tender_docx") {
     const extracted = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
     const sections = extracted.value
       .split(/\n\s*\n+/)

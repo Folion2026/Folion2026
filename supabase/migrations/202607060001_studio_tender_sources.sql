@@ -2,11 +2,13 @@ create table public.package_sources (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
   package_id uuid not null references public.packages(id) on delete cascade,
-  source_type text not null check (source_type in ('tender_pdf','tender_docx')),
+  source_type text not null check (source_type in ('tender_pdf','tender_docx','tender_text')),
   original_filename text not null,
   mime_type text not null,
   file_size bigint,
-  storage_path text not null unique,
+  storage_path text unique,
+  source_text text,
+  check ((source_type = 'tender_text' and source_text is not null and storage_path is null) or (source_type in ('tender_pdf','tender_docx') and storage_path is not null and source_text is null)),
   created_by uuid not null references auth.users(id),
   created_at timestamptz not null default now()
 );

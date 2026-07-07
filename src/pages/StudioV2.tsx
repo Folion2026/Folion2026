@@ -2,18 +2,19 @@ import {
   ArrowLeft,
   BookOpen,
   FileText,
+  FileDown,
   Layers3,
   Presentation,
   Users,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth";
 import { apiRequest } from "../lib/api";
 import { createUuid } from "../lib/id";
+import { exportA4Pages } from "../lib/exportPdf";
 import {
   approvedDraftSections,
-  projectKnowledgeStatus,
   reviewedKnowledgeFacts,
 } from "../lib/project";
 import { supabase } from "../lib/supabase";
@@ -29,7 +30,7 @@ import {
   StudioSection,
 } from "../types";
 
-type Flow = "home" | "sheet" | "collection" | "cv" | "tender";
+type Flow = "home" | "sheet" | "collection" | "pitch" | "cv" | "tender";
 type SheetVariant = "hero" | "plan" | "collage";
 const labels: Record<StudioPackageType, string> = {
   single_project_sheet: "Project Sheet",
@@ -76,7 +77,6 @@ const projectNarrative = (project: Project) =>
     (item) => item.label === "Project narrative",
   )?.value || project.story.response;
 const eligibleProject = (project: Project, mode: StudioPackageMode) =>
-  projectKnowledgeStatus(project) === "Ready for Studio" &&
   project.status !== "Archived" &&
   (mode === "internal" || project.confidentiality !== "internal-only");
 const capabilityIntroduction = (projects: Project[], purpose: string) => {
@@ -230,6 +230,14 @@ export default function StudioV2() {
         onCreated={created}
       />
     );
+  if (flow === "pitch")
+    return (
+      <PitchSetup
+        projects={projects}
+        onBack={() => setFlow("home")}
+        onCreated={created}
+      />
+    );
   if (flow === "cv")
     return (
       <CvSetup
@@ -276,8 +284,8 @@ export default function StudioV2() {
         <Choice
           icon={Presentation}
           title="Pitch"
-          body="Pitch visual framework in development."
-          disabled
+          body="Analyse a briefing and compose an evidence-led visual narrative."
+          onClick={() => setFlow("pitch")}
         />
         <Choice
           icon={Users}
@@ -360,12 +368,30 @@ function ProjectSheetSetup({
   const { session } = useAuth();
   const [mode, setMode] = useState<StudioPackageMode>("internal"),
     [projectId, setProjectId] = useState(""),
+    [search, setSearch] = useState(""),
+    [sector, setSector] = useState(""),
+    [location, setLocation] = useState(""),
+    [client, setClient] = useState(""),
+    [year, setYear] = useState(""),
+    [service, setService] = useState(""),
+    [status, setStatus] = useState(""),
     [variant, setVariant] = useState<SheetVariant>("hero"),
     [primary, setPrimary] = useState(""),
     [support, setSupport] = useState<string[]>([]),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
-  const eligible = projects.filter((item) => eligibleProject(item, mode)),
+  const options = (values: string[]) => [...new Set(values.filter(Boolean))].sort(),
+    available = projects.filter((item) => eligibleProject(item, mode)),
+    eligible = available.filter(
+      (item) =>
+        (!search || item.projectName.toLowerCase().includes(search.toLowerCase())) &&
+        (!sector || item.sector === sector) &&
+        (!location || item.location === location) &&
+        (!client || item.client === client) &&
+        (!year || item.year === year) &&
+        (!service || item.services.includes(service)) &&
+        (!status || item.status === status),
+    ),
     project = eligible.find((item) => item.id === projectId),
     assets = project ? imageAssets(project) : [];
   useEffect(() => {
@@ -373,7 +399,7 @@ function ProjectSheetSetup({
   }, [project, assets, primary]);
   const create = async () => {
     if (!session || !project)
-      return setError("Select one project that is Ready for Studio.");
+      return setError("Select one existing project.");
     setSaving(true);
     try {
       const facts = reviewedKnowledgeFacts(project),
@@ -455,7 +481,19 @@ function ProjectSheetSetup({
           setSupport([]);
         }}
       />
-      <Field title="Choose one Ready for Studio project">
+      <Field title="Choose an existing project">
+        <label className="label">
+          Search by project name
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search projects" />
+        </label>
+        <div className="sv2-filter-grid">
+          <select aria-label="Sector or typology" value={sector} onChange={(event) => setSector(event.target.value)}><option value="">All sectors / typologies</option>{options(available.map(item=>item.sector)).map(value=><option key={value}>{value}</option>)}</select>
+          <select aria-label="Location" value={location} onChange={(event) => setLocation(event.target.value)}><option value="">All locations</option>{options(available.map(item=>item.location)).map(value=><option key={value}>{value}</option>)}</select>
+          <select aria-label="Client" value={client} onChange={(event) => setClient(event.target.value)}><option value="">All clients</option>{options(available.map(item=>item.client)).map(value=><option key={value}>{value}</option>)}</select>
+          <select aria-label="Year" value={year} onChange={(event) => setYear(event.target.value)}><option value="">All years</option>{options(available.map(item=>item.year)).map(value=><option key={value}>{value}</option>)}</select>
+          <select aria-label="Service" value={service} onChange={(event) => setService(event.target.value)}><option value="">All services</option>{options(available.flatMap(item=>item.services)).map(value=><option key={value}>{value}</option>)}</select>
+          <select aria-label="Project status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">All project statuses</option>{options(available.map(item=>item.status)).map(value=><option key={value}>{value}</option>)}</select>
+        </div>
         {eligible.map((item) => (
           <SelectRow
             key={item.id}
@@ -558,6 +596,9 @@ function CollectionSetup({
 }) {
   const { session } = useAuth();
   const [collectionId, setCollectionId] = useState(""),
+    [collectionSearch,setCollectionSearch]=useState(""),
+    [format, setFormat] = useState<"card_grid" | "expanded">("expanded"),
+    [introDraft,setIntroDraft]=useState(""),
     [saving, setSaving] = useState(false),
     [error, setError] = useState(""),
     collection = collections.find((item) => item.id === collectionId),
@@ -567,6 +608,7 @@ function CollectionSetup({
         .filter(
           (project) => project && eligibleProject(project, "internal"),
         ) as Project[]) || [];
+  useEffect(()=>{if(!collection)return setIntroDraft("");setIntroDraft([collection.brief,...selected.map(project=>projectNarrative(project)||projectSummary(project)).filter(populated).slice(0,2)].filter(Boolean).join("\n\n"))},[collectionId]);
   const create = async () => {
     if (!session || !collection) return setError("Select a collection.");
     if (!collection.brief.trim())
@@ -575,7 +617,7 @@ function CollectionSetup({
       );
     if (!selected.length)
       return setError(
-        "The collection needs at least one Ready for Studio project.",
+        "The collection needs at least one existing project.",
       );
     setSaving(true);
     try {
@@ -584,15 +626,7 @@ function CollectionSetup({
             selected.flatMap((project) => project.services).filter(populated),
           ),
         ].slice(0, 3),
-        intro = [
-          collection.brief,
-          `This collection brings together approved evidence from ${selected.map((project) => project.projectName).join(", ")}.`,
-          themes.length
-            ? `The selected work demonstrates ${themes.join(", ")}.`
-            : "",
-        ]
-          .filter(Boolean)
-          .join(" "),
+        intro = introDraft.trim(),
         sections = [
           section(
             "capability_intro",
@@ -628,6 +662,7 @@ function CollectionSetup({
                 collectionId: collection.id,
                 collectionBrief: collection.brief,
                 themes,
+                collectionFormat: format,
               },
               sections,
               projectIds: selected.map((project) => project.id),
@@ -652,7 +687,8 @@ function CollectionSetup({
   return (
     <Setup title="Create a Project Collection" onBack={onBack} error={error}>
       <Field title="Choose a Collection">
-        {collections.map((item) => (
+        <label className="label">Search Collections<input value={collectionSearch} onChange={(event)=>setCollectionSearch(event.target.value)} placeholder="Search Collections"/></label>
+        {collections.filter(item=>item.name.toLowerCase().includes(collectionSearch.toLowerCase())).map((item) => (
           <SelectRow
             key={item.id}
             checked={collectionId === item.id}
@@ -676,6 +712,11 @@ function CollectionSetup({
           </p>
         </div>
       )}
+      {collection&&<label className="label">Opening narrative<textarea value={introDraft} onChange={(event)=>setIntroDraft(event.target.value)}/><small>Generated from the Collection Brief and approved selected-project evidence. Edit before export.</small></label>}
+      <Field title="Export format">
+        <SelectRow type="radio" checked={format==="card_grid"} title="Card Grid" detail="Visual project cards with image, title and year." onChange={()=>setFormat("card_grid")}/>
+        <SelectRow type="radio" checked={format==="expanded"} title="Expanded Collection" detail="Opening narrative followed by one finished Project Sheet per project." onChange={()=>setFormat("expanded")}/>
+      </Field>
       <button
         className="sv2-primary"
         disabled={saving || !collection}
@@ -711,11 +752,13 @@ function PitchSetup({
   const create = async () => {
     if (!session) return;
     if (!briefing.trim()) return setError("Enter a Pitch Briefing.");
-    if (!projectIds.length)
-      return setError("Select at least one approved project as evidence.");
+    if (!eligible.length)
+      return setError("Add at least one project before analysing a Pitch Briefing.");
     setSaving(true);
     try {
-      const selected = projectIds
+      const terms = briefing.toLowerCase().split(/\W+/).filter((word) => word.length > 3),
+        identifiedIds = projectIds.length ? projectIds : eligible.map((project)=>({id:project.id,score:terms.filter((word)=>[project.projectName,project.sector,...project.services,...project.tags,projectSummary(project),projectNarrative(project)].join(" ").toLowerCase().includes(word)).length})).sort((a,b)=>b.score-a.score).slice(0,3).map((value)=>value.id),
+        selected = identifiedIds
           .map((id) => projects.find((project) => project.id === id))
           .filter(Boolean) as Project[],
         lead = selected[0],
@@ -805,7 +848,7 @@ function PitchSetup({
             state: "draft",
             data: { template: "studio-v2-pitch", briefing, slides },
             sections,
-            projectIds,
+            projectIds: identifiedIds,
             personIds: [],
             assetIds: slides.map((slide) => slide.assetId).filter(Boolean),
           }),
@@ -839,7 +882,7 @@ function PitchSetup({
           placeholder="Describe what is being pitched, the opportunity, tension and desired narrative."
         />
       </label>
-      <Field title="Approved projects used as narrative evidence">
+      <Field title="Optional evidence override">
         {eligible.map((project) => (
           <SelectRow
             key={project.id}
@@ -852,7 +895,7 @@ function PitchSetup({
         ))}
       </Field>
       <button className="sv2-primary" disabled={saving} onClick={create}>
-        {saving ? "Composing…" : "Create visual narrative"}
+        {saving ? "Analysing…" : "Analyse Pitch"}
       </button>
     </Setup>
   );
@@ -881,8 +924,17 @@ function CvSetup({
     [personIds, setPersonIds] = useState<string[]>([]),
     [projectIds, setProjectIds] = useState<string[]>([]),
     [brief, setBrief] = useState(""),
+    [matched, setMatched] = useState(false),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
+  const briefTerms = [...new Set(brief.toLowerCase().split(/\W+/).filter((word) => word.length > 3))];
+  const personMatches = people.map((person) => {
+    const approved = assignments.filter((item) => item.approvalStatus === "approved" && item.personId === person.id);
+    const evidenceProjects = approved.map((item) => projects.find((project) => project.id === item.projectId)).filter(Boolean) as Project[];
+    const corpus = [person.position, person.bio || "", ...(person.skills || []), ...approved.flatMap((item) => [item.roleTitle,item.contributionSummary]), ...evidenceProjects.flatMap((project) => [project.sector,...project.services,project.siteArea,project.height])].join(" ").toLowerCase();
+    const covered = briefTerms.filter((term) => corpus.includes(term));
+    return {person,approved,evidenceProjects,covered};
+  }).sort((a,b)=>b.covered.length-a.covered.length);
   const score = (project: Project) => {
     const words = brief
       .toLowerCase()
@@ -1039,24 +1091,26 @@ function CvSetup({
         }}
       />
       <label className="label">
-        Opportunity brief or context <small>(optional for a general CV)</small>
+        CV / staffing brief
         <textarea
           value={brief}
-          onChange={(event) => setBrief(event.target.value)}
+          onChange={(event) => {setBrief(event.target.value);setMatched(false);setPersonIds([]);setProjectIds([])}}
+          placeholder="Describe the expertise, sectors, scale, services and seniority needed."
         />
       </label>
-      <Field title="Person or proposed team">
-        {people.map((person) => (
+      <button className="sv2-primary" disabled={!brief.trim()} onClick={()=>{setMatched(true);setError(brief.trim()?"":"Enter a CV / staffing brief.")}}>Match People</button>
+      {matched && <Field title="Ranked people">
+        {personMatches.map(({person,evidenceProjects,covered}) => (
           <SelectRow
             key={person.id}
             checked={personIds.includes(person.id)}
             type="checkbox"
             title={person.name}
-            detail={person.position}
+            detail={`${person.position} · ${covered.length} of ${briefTerms.length} brief requirements evidenced · ${evidenceProjects.map(project=>project.projectName).join(", ") || "No approved project role evidence"}`}
             onChange={() => togglePerson(person.id)}
           />
         ))}
-      </Field>
+      </Field>}
       {personIds.length > 0 && (
         <Field title="Selected experience · five recommended by default">
           {roleSafe.map((project) => (
@@ -1533,6 +1587,18 @@ function PackageWorkspace({
   onBack: () => void;
 }) {
   const project = projects.find((value) => value.id === item.projectIds[0]);
+  const pagesRef = useRef<HTMLElement>(null),
+    [exporting, setExporting] = useState(false),
+    canExport = item.packageType !== "pitch";
+  const download = async () => {
+    if (!pagesRef.current) return;
+    setExporting(true);
+    try {
+      await exportA4Pages(pagesRef.current, item.title);
+    } finally {
+      setExporting(false);
+    }
+  };
   return (
     <div className="sv2-workspace">
       <header>
@@ -1544,13 +1610,24 @@ function PackageWorkspace({
           <p className="eyebrow">{labels[item.packageType]}</p>
           <h1>{item.title}</h1>
         </div>
-        <span>Saved · {new Date(item.updatedAt).toLocaleString()}</span>
+        <div className="sv2-workspace-actions">
+          <span>Saved · {new Date(item.updatedAt).toLocaleString()}</span>
+          {canExport ? (
+            <button className="sv2-primary" disabled={exporting} onClick={() => void download()}>
+              <FileDown size={16} /> {exporting ? "Preparing PDF…" : "Export PDF"}
+            </button>
+          ) : (
+            <button disabled>Preview only — export coming next</button>
+          )}
+        </div>
       </header>
-      <main>
+      <main ref={pagesRef}>
         {item.packageType === "single_project_sheet" && project ? (
           <ProjectSheetPageNew item={item} project={project} />
         ) : item.packageType === "project_collection" ? (
           <CollectionPages item={item} projects={projects} />
+        ) : item.packageType === "pitch" ? (
+          <PitchPages item={item} projects={projects} />
         ) : item.packageType === "cv" ? (
           <CvPagesNew item={item} projects={projects} people={people} />
         ) : (
@@ -1661,7 +1738,13 @@ function CollectionPages({
     themes = ((item.data.themes as string[]) || [])
       .filter(populated)
       .slice(0, 3),
-    hero = ordered.flatMap(imageAssets)[0];
+    hero = ordered.flatMap(imageAssets)[0],
+    format = String(item.data.collectionFormat || "expanded");
+  if (format === "card_grid") {
+    const pages: Project[][] = [];
+    for (let index = 0; index < ordered.length; index += 6) pages.push(ordered.slice(index, index + 6));
+    return <>{pages.map((projectsOnPage,pageIndex)=><article className="sv2-page sv2-card-grid" key={pageIndex}><header><p className="eyebrow">Project Collection</p><h2>{item.title}</h2>{pageIndex===0&&intro&&<p>{intro}</p>}</header><div>{projectsOnPage.map(project=>{const image=imageAssets(project)[0];return <article key={project.id}>{image&&<AssetImage asset={image}/>}<section><h3>{project.projectName}</h3>{populated(project.year)&&<p>{project.year}</p>}</section></article>})}</div></article>)}</>;
+  }
   return (
     <>
       <article
@@ -1906,7 +1989,7 @@ function PitchPages({
   item: StudioPackage;
   projects: Project[];
 }) {
-  const slides = Array.isArray(item.data.slides)
+  const initialSlides = Array.isArray(item.data.slides)
       ? (item.data.slides as Array<{
           kind: string;
           title: string;
@@ -1915,6 +1998,7 @@ function PitchPages({
           assetId?: string;
         }>)
       : [],
+    [slides,setSlides]=useState(initialSlides),
     [active, setActive] = useState<number | null>(null);
   const render = (
     slide: (typeof slides)[number],
@@ -1962,6 +2046,7 @@ function PitchPages({
           </button>
         ))}
       </div>
+      <section className="sv2-slide-editor"><h3>Review key statements</h3>{slides.map((slide,index)=><label className="label" key={`${slide.kind}-${index}`}>Slide {index+1}<input value={slide.title} onChange={event=>setSlides(current=>current.map((value,i)=>i===index?{...value,title:event.target.value}:value))}/><textarea value={slide.body} onChange={event=>setSlides(current=>current.map((value,i)=>i===index?{...value,body:event.target.value}:value))}/></label>)}</section>
       {active !== null && slides[active] && (
         <div className="sv2-present">
           <button className="sv2-present-close" onClick={() => setActive(null)}>
@@ -2244,6 +2329,8 @@ function TenderSetupNew({
   const [mode, setMode] = useState<StudioPackageMode>("internal"),
     [file, setFile] = useState<File | null>(null),
     [fixture, setFixture] = useState(false),
+    [pasteMode, setPasteMode] = useState(false),
+    [pastedText, setPastedText] = useState(""),
     [count, setCount] = useState(3),
     [projectIds, setProjectIds] = useState<string[]>([]),
     [personIds, setPersonIds] = useState<string[]>([]),
@@ -2262,12 +2349,12 @@ function TenderSetupNew({
   const create = async () => {
     if (!session || !workspace || !supabase)
       return setError("A workspace session is required.");
-    if (!fixture && !file)
+    if (!fixture && !pasteMode && !file)
       return setError(
         "Upload a Tender Brief in PDF or DOCX format, or use the controlled sample tender.",
       );
     if (
-      !fixture &&
+      !fixture && !pasteMode &&
       file &&
       !(
         (file.type === "application/pdf" && /\.pdf$/i.test(file.name)) ||
@@ -2284,7 +2371,9 @@ function TenderSetupNew({
       const selected = projectIds.slice(0, count),
         title = fixture
           ? sampleTender.tender_title
-          : file!.name.replace(/\.(pdf|docx)$/i, ""),
+          : pasteMode
+            ? "Pasted Tender Brief"
+            : file!.name.replace(/\.(pdf|docx)$/i, ""),
         sections = [
           section(
             "tender_understanding",
@@ -2321,7 +2410,7 @@ function TenderSetupNew({
                 projectCount: count,
                 tenderSourceName: fixture
                   ? "Controlled sample tender"
-                  : file!.name,
+                  : pasteMode ? "Pasted Tender Brief" : file!.name,
                 tenderFixture: fixture ? sampleTender : null,
               },
               sections,
@@ -2365,6 +2454,13 @@ function TenderSetupNew({
           },
         );
       }
+      if (pasteMode && !fixture) {
+        await apiRequest(
+          session,
+          `/v1/packages/${encodeURIComponent(result.package.id)}/tender-source`,
+          { method: "POST", body: JSON.stringify({ pastedText }) },
+        );
+      }
       onCreated(result.package);
     } catch (reason) {
       setError(
@@ -2389,21 +2485,25 @@ function TenderSetupNew({
         <label>
           <input
             type="radio"
-            checked={!fixture}
-            onChange={() => setFixture(false)}
+            checked={!fixture && !pasteMode}
+            onChange={() => { setFixture(false); setPasteMode(false); }}
           />
           Upload Tender Brief
+        </label>
+        <label>
+          <input type="radio" checked={pasteMode} onChange={() => { setFixture(false); setPasteMode(true); setFile(null); }} />
+          Paste Tender Brief text
         </label>
         <label>
           <input
             type="radio"
             checked={fixture}
-            onChange={() => setFixture(true)}
+            onChange={() => { setFixture(true); setPasteMode(false); setFile(null); }}
           />
           Use controlled sample tender
         </label>
       </div>
-      {!fixture && (
+      {!fixture && !pasteMode && (
         <label className="label">
           Upload Tender Brief
           <input
@@ -2420,6 +2520,7 @@ function TenderSetupNew({
           </small>
         </label>
       )}
+      {pasteMode && <label className="label">Paste Tender Brief<textarea value={pastedText} onChange={(event) => setPastedText(event.target.value)} placeholder="Paste the tender scope, evaluation criteria and requirements"/><small>Folion analyses only the text supplied here.</small></label>}
       {fixture && (
         <div className="sv2-fixture">
           <strong>{sampleTender.tender_title}</strong>
@@ -2471,10 +2572,10 @@ function TenderSetupNew({
       </Field>
       <button
         className="sv2-primary"
-        disabled={saving || !projectIds.length}
+        disabled={saving || (pasteMode && !pastedText.trim())}
         onClick={create}
       >
-        {saving ? "Preparing…" : "Create tender workspace"}
+        {saving ? "Analysing…" : "Analyse Tender"}
       </button>
     </Setup>
   );
@@ -2495,7 +2596,8 @@ function TenderPagesNew({
       status: string;
       analysis?: Record<string, unknown>;
       failure_reason?: string;
-    } | null>(null);
+    } | null>(null),
+    [teamSlots,setTeamSlots]=useState<Record<string,string>>({"Team Lead":"","Senior":"","Junior":"","Support / Management":""});
   useEffect(() => {
     if (!session || fixture) return;
     let stopped = false,
@@ -2524,9 +2626,9 @@ function TenderPagesNew({
     criteria = Array.isArray(analysis.evaluation_criteria)
       ? (analysis.evaluation_criteria as string[])
       : [],
-    selected = item.projectIds
-      .map((id) => projects.find((project) => project.id === id))
-      .filter(Boolean) as Project[],
+    matchingTerms = [...new Set(criteria.flatMap(value=>value.toLowerCase().split(/\W+/)).filter(word=>word.length>4))],
+    rankedProjects = projects.filter(project=>project.status!=="Archived").map(project=>({project,covered:matchingTerms.filter(word=>[project.sector,...project.services,...project.tags,projectSummary(project),projectNarrative(project)].join(" ").toLowerCase().includes(word))})).sort((a,b)=>b.covered.length-a.covered.length),
+    selected = rankedProjects.slice(0,Number(item.data.projectCount)||5).map(value=>value.project),
     selectedPeople = people.filter((person) =>
       item.personIds.includes(person.id),
     );
@@ -2650,12 +2752,16 @@ function TenderPagesNew({
           </p>
         )}
       </section>
+      {criteria.length>0&&<section className="sv2-tender-shortlist"><h3>Suggested project evidence</h3>{selected.map(project=>{const result=rankedProjects.find(value=>value.project.id===project.id)!;return <article key={project.id}><strong>{project.projectName}</strong><span>{result.covered.length} of {matchingTerms.length} tender criteria terms evidenced</span><p>{projectSummary(project)}</p>{matchingTerms.length>result.covered.length&&<small>Gap: {matchingTerms.filter(term=>!result.covered.includes(term)).slice(0,5).join(", ")}</small>}</article>})}</section>}
+      {criteria.length>0&&<section className="sv2-team-builder"><h3>Tender team builder</h3>{Object.entries(teamSlots).map(([slot,personId])=><label className="label" key={slot}>{slot}<select value={personId} onChange={event=>setTeamSlots(current=>({...current,[slot]:event.target.value}))}><option value="">Select a person</option>{people.map(person=>{const relevant=selected.filter(project=>project.team.some(member=>member.personId===person.id&&member.projectRole.trim()));return <option key={person.id} value={person.id}>{person.name} · {person.position}{relevant.length?` · ${relevant.length} approved precedents`:" · no approved role evidence"}</option>})}</select></label>)}</section>}
       {selectedPeople.length > 0 && (
         <footer>
           Selected people:{" "}
           {selectedPeople.map((person) => person.name).join(", ")}
         </footer>
       )}
+      {criteria.length>0&&<article className="sv2-page sv2-tender-output"><p className="eyebrow">Tender Response</p><h2>{String(analysis.tender_title||item.title)}</h2><section><h3>Requirement-to-evidence mapping</h3>{criteria.map(criterion=>{const project=match(criterion);return <div key={criterion}><strong>{criterion}</strong>{project?<p>{project.projectName} — {project.services.join(", ")||project.sector}</p>:<p className="sv2-gap-copy">Evidence gap — no approved project evidence selected.</p>}</div>})}</section><section><h3>Selected team</h3>{Object.entries(teamSlots).map(([slot,personId])=><div key={slot}><strong>{slot}</strong><p>{people.find(person=>person.id===personId)?.name||"Not selected — gap remains"}</p></div>)}</section></article>}
+      {criteria.length>0&&selected.map(project=><ProjectSheetPageNew key={project.id} item={{...item,data:{...item.data,primaryAssetId:imageAssets(project)[0]?.id}}} project={project}/>)}
     </div>
   );
 }
