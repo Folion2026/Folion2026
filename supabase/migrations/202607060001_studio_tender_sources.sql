@@ -2,7 +2,7 @@ create table public.package_sources (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
   package_id uuid not null references public.packages(id) on delete cascade,
-  source_type text not null check (source_type in ('tender_pdf')),
+  source_type text not null check (source_type in ('tender_pdf','tender_docx')),
   original_filename text not null,
   mime_type text not null,
   file_size bigint,

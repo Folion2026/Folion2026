@@ -1,109 +1,995 @@
-import {createClient} from '@supabase/supabase-js'
-import {getDocument} from 'pdfjs-dist/legacy/build/pdf.mjs'
-import {normalise,validateCandidateEvidence} from './validation.js'
+import { createClient } from "@supabase/supabase-js";
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import mammoth from "mammoth";
+import { normalise, validateCandidateEvidence } from "./validation.js";
 
-type Json=Record<string,unknown>
-type Job={id:string;workspace_id:string;project_id:string;source_asset_id:string;created_by:string;narrative_only:boolean}
-type TenderJob={id:string;workspace_id:string;package_id:string;package_source_id:string;created_by:string}
-type PageRecord={id:string;page_number:number;extracted_text:string;normalised_text:string}
-type Candidate={category:string;field:string;value:string;source_page:number;exact_evidence_quote:string}
-type Fact={id:string;category:string;field:string;structured_field:string|null;value:string;status:string;sources?:unknown[]}
-type Draft={text:string;basis_type:'source_supported'|'team_input'|'mixed';source_fact_ids:string[];team_input_refs:string[]}
-type ProjectText={project_summary:Draft;project_narrative:Draft}
+type Json = Record<string, unknown>;
+type Job = {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  source_asset_id: string;
+  created_by: string;
+  narrative_only: boolean;
+};
+type TenderJob = {
+  id: string;
+  workspace_id: string;
+  package_id: string;
+  package_source_id: string;
+  created_by: string;
+};
+type PageRecord = {
+  id: string;
+  page_number: number;
+  extracted_text: string;
+  normalised_text: string;
+};
+type Candidate = {
+  category: string;
+  field: string;
+  value: string;
+  source_page: number;
+  exact_evidence_quote: string;
+};
+type Fact = {
+  id: string;
+  category: string;
+  field: string;
+  structured_field: string | null;
+  value: string;
+  status: string;
+  sources?: unknown[];
+};
+type Draft = {
+  text: string;
+  basis_type: "source_supported" | "team_input" | "mixed";
+  source_fact_ids: string[];
+  team_input_refs: string[];
+};
+type ProjectText = { project_summary: Draft; project_narrative: Draft };
 
-const supabaseUrl=process.env.SUPABASE_URL?.trim()||''
-const supabaseSecretKey=process.env.SUPABASE_SECRET_KEY?.trim()||''
-const geminiKey=process.env.GEMINI_API_KEY?.trim()||''
-const geminiModel=process.env.GEMINI_MODEL?.trim()||''
-if(!supabaseUrl||!supabaseSecretKey||!geminiKey||!geminiModel)throw new Error('Worker requires SUPABASE_URL, SUPABASE_SECRET_KEY, GEMINI_API_KEY and GEMINI_MODEL')
-const admin=createClient(supabaseUrl,supabaseSecretKey,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}})
+const supabaseUrl = process.env.SUPABASE_URL?.trim() || "";
+const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY?.trim() || "";
+const geminiKey = process.env.GEMINI_API_KEY?.trim() || "";
+const geminiModel = process.env.GEMINI_MODEL?.trim() || "";
+if (!supabaseUrl || !supabaseSecretKey || !geminiKey || !geminiModel)
+  throw new Error(
+    "Worker requires SUPABASE_URL, SUPABASE_SECRET_KEY, GEMINI_API_KEY and GEMINI_MODEL",
+  );
+const admin = createClient(supabaseUrl, supabaseSecretKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+  },
+});
 
-const categories=new Set(['project_identity','scale','practice_role','place_context','design_response','outcomes_relevance','tags_themes'])
-const basisTypes=new Set(['source_supported','team_input','mixed'])
-const sectionTypes=['project_summary','project_narrative'] as const
-const teamRefs=new Set(['challenge_or_opportunity_input','response_input','future_relevance_input'])
-const teamRefToKey:Record<string,string>={challenge_or_opportunity_input:'challengeOpportunity',response_input:'teamResponse',future_relevance_input:'futureRelevance'}
-const activeStatuses=['queued','extracting_text','analysing','validating']
-const emptyPdfMessage='This PDF does not contain readable text yet. Scanned-document support is not available in this version.'
-const largePdfMessage='This document is too large for analysis in this version. Please use a shorter report or split it into sections.'
-const genericFailure='Folion could not analyse this document. Try again or check the file.'
-const articulationFailure='Folion could not prepare the project text. Try again once the project information is ready.'
-class UserError extends Error{}
-const audit=async(job:Job,action:string,metadata:Json={})=>{await admin.from('audit_events').insert({workspace_id:job.workspace_id,actor_user_id:job.created_by,action,entity_type:'ingestion_job',entity_id:job.id,metadata:{projectId:job.project_id,sourceAssetId:job.source_asset_id,...metadata}})}
+const categories = new Set([
+  "project_identity",
+  "scale",
+  "practice_role",
+  "place_context",
+  "design_response",
+  "outcomes_relevance",
+  "tags_themes",
+]);
+const basisTypes = new Set(["source_supported", "team_input", "mixed"]);
+const sectionTypes = ["project_summary", "project_narrative"] as const;
+const teamRefs = new Set([
+  "challenge_or_opportunity_input",
+  "response_input",
+  "future_relevance_input",
+]);
+const teamRefToKey: Record<string, string> = {
+  challenge_or_opportunity_input: "challengeOpportunity",
+  response_input: "teamResponse",
+  future_relevance_input: "futureRelevance",
+};
+const activeStatuses = ["queued", "extracting_text", "analysing", "validating"];
+const emptyPdfMessage =
+  "This PDF does not contain readable text yet. Scanned-document support is not available in this version.";
+const largePdfMessage =
+  "This document is too large for analysis in this version. Please use a shorter report or split it into sections.";
+const genericFailure =
+  "Folion could not analyse this document. Try again or check the file.";
+const articulationFailure =
+  "Folion could not prepare the project text. Try again once the project information is ready.";
+class UserError extends Error {}
+const audit = async (job: Job, action: string, metadata: Json = {}) => {
+  await admin
+    .from("audit_events")
+    .insert({
+      workspace_id: job.workspace_id,
+      actor_user_id: job.created_by,
+      action,
+      entity_type: "ingestion_job",
+      entity_id: job.id,
+      metadata: {
+        projectId: job.project_id,
+        sourceAssetId: job.source_asset_id,
+        ...metadata,
+      },
+    });
+};
 
-const fieldAliases:Record<string,string>={
- project_name:'project_name',name:'project_name',location:'location',project_location:'location',address:'address',site_address:'address',client:'client',project_client:'client',status:'project_status',project_status:'project_status',year:'year',project_year:'year',date:'dates',dates:'dates',project_dates:'dates',project_type:'project_type',type:'project_type',sector:'sector_typology',typology:'sector_typology',sector_typology:'sector_typology',site_area:'site_area',gfa:'gfa',gross_floor_area:'gfa',dwellings:'dwellings_units',units:'dwellings_units',dwellings_units:'dwellings_units',height:'height_levels',levels:'height_levels',storeys:'height_levels',stories:'height_levels',height_levels:'height_levels',fsr:'fsr',floor_space_ratio:'fsr',other_scale_metrics:'other_scale_metrics',practice:'practice_name',practice_name:'practice_name',services:'services',service:'services',scope:'scope',responsibilities:'explicit_responsibilities',explicit_responsibilities:'explicit_responsibilities'
+const fieldAliases: Record<string, string> = {
+  project_name: "project_name",
+  name: "project_name",
+  location: "location",
+  project_location: "location",
+  address: "address",
+  site_address: "address",
+  client: "client",
+  project_client: "client",
+  status: "project_status",
+  project_status: "project_status",
+  year: "year",
+  project_year: "year",
+  date: "dates",
+  dates: "dates",
+  project_dates: "dates",
+  project_type: "project_type",
+  type: "project_type",
+  sector: "sector_typology",
+  typology: "sector_typology",
+  sector_typology: "sector_typology",
+  site_area: "site_area",
+  gfa: "gfa",
+  gross_floor_area: "gfa",
+  dwellings: "dwellings_units",
+  units: "dwellings_units",
+  dwellings_units: "dwellings_units",
+  height: "height_levels",
+  levels: "height_levels",
+  storeys: "height_levels",
+  stories: "height_levels",
+  height_levels: "height_levels",
+  fsr: "fsr",
+  floor_space_ratio: "fsr",
+  other_scale_metrics: "other_scale_metrics",
+  practice: "practice_name",
+  practice_name: "practice_name",
+  services: "services",
+  service: "services",
+  scope: "scope",
+  responsibilities: "explicit_responsibilities",
+  explicit_responsibilities: "explicit_responsibilities",
+};
+function canonicalField(field: string) {
+  return (
+    fieldAliases[
+      field
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_|_$/g, "")
+    ] || null
+  );
 }
-function canonicalField(field:string){return fieldAliases[field.toLowerCase().trim().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')]||null}
-function equivalentValue(field:string,value:string){let result=normalise(value);if(field==='height_levels')result=result.replace(/\b(stories|storeys|levels)\b/g,'level');return result}
-
-const extractionSchema={type:'OBJECT',required:['candidate_facts'],properties:{candidate_facts:{type:'ARRAY',items:{type:'OBJECT',required:['category','field','value','source_page','exact_evidence_quote'],properties:{category:{type:'STRING',enum:[...categories]},field:{type:'STRING'},value:{type:'STRING'},source_page:{type:'INTEGER'},exact_evidence_quote:{type:'STRING'}}}}}}
-const draftSchema={type:'OBJECT',required:['text','basis_type','source_fact_ids','team_input_refs'],properties:{text:{type:'STRING'},basis_type:{type:'STRING',enum:[...basisTypes]},source_fact_ids:{type:'ARRAY',items:{type:'STRING'}},team_input_refs:{type:'ARRAY',items:{type:'STRING',enum:[...teamRefs]}}}}
-const articulationSchema={type:'OBJECT',required:[...sectionTypes],properties:Object.fromEntries(sectionTypes.map(key=>[key,draftSchema]))}
-const tenderSchema={type:'OBJECT',required:['tender_title','client','scope','evaluation_criteria','mandatory_requirements','project_type_sector','requested_services','priorities','programme_constraints','response_structure','key_decision_factors','client_needs','capability_to_prove','project_evidence_required','team_evidence_required','evidence_gaps'],properties:{tender_title:{type:'STRING'},client:{type:'STRING'},scope:{type:'STRING'},evaluation_criteria:{type:'ARRAY',items:{type:'STRING'}},mandatory_requirements:{type:'ARRAY',items:{type:'STRING'}},project_type_sector:{type:'ARRAY',items:{type:'STRING'}},requested_services:{type:'ARRAY',items:{type:'STRING'}},priorities:{type:'ARRAY',items:{type:'STRING'}},programme_constraints:{type:'ARRAY',items:{type:'STRING'}},response_structure:{type:'ARRAY',items:{type:'STRING'}},key_decision_factors:{type:'ARRAY',items:{type:'STRING'}},client_needs:{type:'STRING'},capability_to_prove:{type:'ARRAY',items:{type:'STRING'}},project_evidence_required:{type:'ARRAY',items:{type:'STRING'}},team_evidence_required:{type:'ARRAY',items:{type:'STRING'}},evidence_gaps:{type:'ARRAY',items:{type:'STRING'}}}}
-
-async function gemini(prompt:string,responseSchema:Json,failure:string){
- const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent?key=${encodeURIComponent(geminiKey)}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0,responseMimeType:'application/json',responseSchema}})})
- if(!response.ok)throw new UserError(failure);const payload=await response.json() as Json;const candidates=payload.candidates;if(!Array.isArray(candidates)||!candidates[0]||typeof candidates[0]!=='object')throw new UserError(failure);const parts=((candidates[0] as Json).content as Json|undefined)?.parts;if(!Array.isArray(parts)||!parts[0]||typeof parts[0]!=='object')throw new UserError(failure);try{return JSON.parse(String((parts[0] as Json).text||'')) as unknown}catch{throw new UserError(failure)}
+function equivalentValue(field: string, value: string) {
+  let result = normalise(value);
+  if (field === "height_levels")
+    result = result.replace(/\b(stories|storeys|levels)\b/g, "level");
+  return result;
 }
 
-async function extract(pageText:string){
- const prompt=`You are Folion's evidence extraction engine. Return strict JSON only. Extract only facts explicitly stated in the page-indexed text. Every fact requires an exact verbatim quote and correct page. Use a recognised canonical field name where possible: ${Object.keys(fieldAliases).join(', ')}. Never infer missing facts, roles, outcomes, status, metrics, awards or success. Document branding alone does not establish practice role. Do not generate narrative.\n\n${pageText}`
- const raw=await gemini(prompt,extractionSchema,genericFailure) as Json;if(!Array.isArray(raw.candidate_facts))throw new UserError(genericFailure)
- return raw.candidate_facts.map(item=>{if(!item||typeof item!=='object')throw new UserError(genericFailure);const row=item as Json;const result={category:String(row.category||''),field:String(row.field||'').trim(),value:String(row.value||'').trim(),source_page:Number(row.source_page),exact_evidence_quote:String(row.exact_evidence_quote||'').trim()};if(!categories.has(result.category)||!result.field||!result.value||!Number.isInteger(result.source_page)||result.source_page<1||!result.exact_evidence_quote)throw new UserError(genericFailure);return result})
+const extractionSchema = {
+  type: "OBJECT",
+  required: ["candidate_facts"],
+  properties: {
+    candidate_facts: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        required: [
+          "category",
+          "field",
+          "value",
+          "source_page",
+          "exact_evidence_quote",
+        ],
+        properties: {
+          category: { type: "STRING", enum: [...categories] },
+          field: { type: "STRING" },
+          value: { type: "STRING" },
+          source_page: { type: "INTEGER" },
+          exact_evidence_quote: { type: "STRING" },
+        },
+      },
+    },
+  },
+};
+const draftSchema = {
+  type: "OBJECT",
+  required: ["text", "basis_type", "source_fact_ids", "team_input_refs"],
+  properties: {
+    text: { type: "STRING" },
+    basis_type: { type: "STRING", enum: [...basisTypes] },
+    source_fact_ids: { type: "ARRAY", items: { type: "STRING" } },
+    team_input_refs: {
+      type: "ARRAY",
+      items: { type: "STRING", enum: [...teamRefs] },
+    },
+  },
+};
+const articulationSchema = {
+  type: "OBJECT",
+  required: [...sectionTypes],
+  properties: Object.fromEntries(sectionTypes.map((key) => [key, draftSchema])),
+};
+const tenderSchema = {
+  type: "OBJECT",
+  required: [
+    "tender_title",
+    "client",
+    "scope",
+    "evaluation_criteria",
+    "mandatory_requirements",
+    "project_type_sector",
+    "requested_services",
+    "priorities",
+    "programme_constraints",
+    "response_structure",
+    "key_decision_factors",
+    "client_needs",
+    "capability_to_prove",
+    "project_evidence_required",
+    "team_evidence_required",
+    "evidence_gaps",
+  ],
+  properties: {
+    tender_title: { type: "STRING" },
+    client: { type: "STRING" },
+    scope: { type: "STRING" },
+    evaluation_criteria: { type: "ARRAY", items: { type: "STRING" } },
+    mandatory_requirements: { type: "ARRAY", items: { type: "STRING" } },
+    project_type_sector: { type: "ARRAY", items: { type: "STRING" } },
+    requested_services: { type: "ARRAY", items: { type: "STRING" } },
+    priorities: { type: "ARRAY", items: { type: "STRING" } },
+    programme_constraints: { type: "ARRAY", items: { type: "STRING" } },
+    response_structure: { type: "ARRAY", items: { type: "STRING" } },
+    key_decision_factors: { type: "ARRAY", items: { type: "STRING" } },
+    client_needs: { type: "STRING" },
+    capability_to_prove: { type: "ARRAY", items: { type: "STRING" } },
+    project_evidence_required: { type: "ARRAY", items: { type: "STRING" } },
+    team_evidence_required: { type: "ARRAY", items: { type: "STRING" } },
+    evidence_gaps: { type: "ARRAY", items: { type: "STRING" } },
+  },
+};
+
+async function gemini(prompt: string, responseSchema: Json, failure: string) {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent?key=${encodeURIComponent(geminiKey)}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0,
+          responseMimeType: "application/json",
+          responseSchema,
+        },
+      }),
+    },
+  );
+  if (!response.ok) throw new UserError(failure);
+  const payload = (await response.json()) as Json;
+  const candidates = payload.candidates;
+  if (
+    !Array.isArray(candidates) ||
+    !candidates[0] ||
+    typeof candidates[0] !== "object"
+  )
+    throw new UserError(failure);
+  const parts = ((candidates[0] as Json).content as Json | undefined)?.parts;
+  if (!Array.isArray(parts) || !parts[0] || typeof parts[0] !== "object")
+    throw new UserError(failure);
+  try {
+    return JSON.parse(String((parts[0] as Json).text || "")) as unknown;
+  } catch {
+    throw new UserError(failure);
+  }
 }
 
-function validateProjectText(value:unknown,allowedIds:Set<string>):ProjectText{
- if(!value||typeof value!=='object')throw new UserError(articulationFailure);const raw=value as Json;const result={} as ProjectText
- for(const key of sectionTypes){const value=raw[key];if(!value||typeof value!=='object')throw new UserError(articulationFailure);const row=value as Json;const text=String(row.text||'').trim();const basis=String(row.basis_type||'');const ids=Array.isArray(row.source_fact_ids)?row.source_fact_ids.map(String):[];const refs=Array.isArray(row.team_input_refs)?row.team_input_refs.map(String):[];if(!text||!basisTypes.has(basis)||ids.some(id=>!allowedIds.has(id))||refs.some(ref=>!teamRefs.has(ref)))throw new UserError(articulationFailure);result[key]={text,basis_type:basis as Draft['basis_type'],source_fact_ids:[...new Set(ids)],team_input_refs:[...new Set(refs)]}}
- return result
+async function extract(pageText: string) {
+  const prompt = `You are Folion's evidence extraction engine. Return strict JSON only. Extract only facts explicitly stated in the page-indexed text. Every fact requires an exact verbatim quote and correct page. Use a recognised canonical field name where possible: ${Object.keys(fieldAliases).join(", ")}. Never infer missing facts, roles, outcomes, status, metrics, awards or success. Document branding alone does not establish practice role. Do not generate narrative.\n\n${pageText}`;
+  const raw = (await gemini(prompt, extractionSchema, genericFailure)) as Json;
+  if (!Array.isArray(raw.candidate_facts)) throw new UserError(genericFailure);
+  return raw.candidate_facts.map((item) => {
+    if (!item || typeof item !== "object") throw new UserError(genericFailure);
+    const row = item as Json;
+    const result = {
+      category: String(row.category || ""),
+      field: String(row.field || "").trim(),
+      value: String(row.value || "").trim(),
+      source_page: Number(row.source_page),
+      exact_evidence_quote: String(row.exact_evidence_quote || "").trim(),
+    };
+    if (
+      !categories.has(result.category) ||
+      !result.field ||
+      !result.value ||
+      !Number.isInteger(result.source_page) ||
+      result.source_page < 1 ||
+      !result.exact_evidence_quote
+    )
+      throw new UserError(genericFailure);
+    return result;
+  });
 }
 
-async function projectPacket(job:Job,includeReviewable:boolean){
- const [{data:project,error:projectError},{data:items,error:itemError},{data:sources,error:sourceError}]=await Promise.all([admin.from('projects').select('project_name,data').eq('workspace_id',job.workspace_id).eq('id',job.project_id).single(),admin.from('knowledge_items').select('id,category,field,structured_field,value,status,conflict_group_id').eq('workspace_id',job.workspace_id).eq('project_id',job.project_id).in('status',includeReviewable?['accepted','review_needed']:['accepted']).order('created_at'),admin.from('knowledge_item_sources').select('knowledge_item_id,source_asset_id,source_page,exact_evidence_quote').eq('workspace_id',job.workspace_id).eq('project_id',job.project_id)]);if(projectError)throw projectError;if(itemError)throw itemError;if(sourceError)throw sourceError
- const conflictCounts=new Map<string,Set<string>>();for(const item of items||[]){if(!item.conflict_group_id)continue;const values=conflictCounts.get(item.conflict_group_id)||new Set<string>();values.add(item.value);conflictCounts.set(item.conflict_group_id,values)}
- const facts=(items||[]).filter(item=>!item.conflict_group_id||conflictCounts.get(item.conflict_group_id)?.size===1).map(item=>({...item,sources:(sources||[]).filter(source=>source.knowledge_item_id===item.id)})) as Fact[]
- const data=(project.data||{}) as Json;const knowledge=(data.knowledge||{}) as Json;const manualFacts=Array.isArray(knowledge.facts)?knowledge.facts.filter(item=>item&&typeof item==='object'&&(item as Json).status==='reviewed').map(item=>({field:(item as Json).key,value:(item as Json).value,origin:'manual_approved'})):[]
- const team=(knowledge.teamInput||{}) as Json;const teamInput={challenge_or_opportunity_input:String(team.challengeOpportunity||''),response_input:String(team.teamResponse||''),future_relevance_input:String(team.futureRelevance||'')}
- return{project,facts,manualFacts,teamInput}
+function validateProjectText(
+  value: unknown,
+  allowedIds: Set<string>,
+): ProjectText {
+  if (!value || typeof value !== "object")
+    throw new UserError(articulationFailure);
+  const raw = value as Json;
+  const result = {} as ProjectText;
+  for (const key of sectionTypes) {
+    const value = raw[key];
+    if (!value || typeof value !== "object")
+      throw new UserError(articulationFailure);
+    const row = value as Json;
+    const text = String(row.text || "").trim();
+    const basis = String(row.basis_type || "");
+    const ids = Array.isArray(row.source_fact_ids)
+      ? row.source_fact_ids.map(String)
+      : [];
+    const refs = Array.isArray(row.team_input_refs)
+      ? row.team_input_refs.map(String)
+      : [];
+    if (
+      !text ||
+      !basisTypes.has(basis) ||
+      ids.some((id) => !allowedIds.has(id)) ||
+      refs.some((ref) => !teamRefs.has(ref))
+    )
+      throw new UserError(articulationFailure);
+    result[key] = {
+      text,
+      basis_type: basis as Draft["basis_type"],
+      source_fact_ids: [...new Set(ids)],
+      team_input_refs: [...new Set(refs)],
+    };
+  }
+  return result;
 }
 
-async function synthesize(job:Job,includeReviewable:boolean){
- const packet=await projectPacket(job,includeReviewable);if(!packet.facts.length&&!packet.manualFacts.length&&!Object.values(packet.teamInput).some(Boolean))throw new UserError(articulationFailure)
- const prompt=`You are Folion's evidence-led project writing engine. Return strict JSON containing only project_summary and project_narrative. Reason internally through the challenge, response, distinctive strength and future relevance, but never expose those as separate outputs. Write new, project-specific professional language: do not copy report sentences, concatenate Team Input, or merely grammar-correct it. Project Summary should orient an unfamiliar reader to what the project is, why the practice was engaged, its place, type, relevant scale, core condition and practice role; target 80-140 words where supported. Project Narrative must be one coherent strategic story answering what was at stake, what the team did, what was distinctive, and why the project is useful precedent; target 140-240 words where supported. Project Summary may use only source-supported or approved manual facts. Team Input is strategic context, never verified factual evidence. Every factual assertion must cite source_fact_ids. Use fewer words rather than filler. Avoid generic praise and never invent outcomes, delivery, awards, people, roles, status, metrics, client satisfaction or success.\n\nProject knowledge packet:\n${JSON.stringify({project_name:packet.project.project_name,validated_source_supported_facts:packet.facts,approved_manual_project_facts:packet.manualFacts,original_team_input:packet.teamInput})}`
- const output=validateProjectText(await gemini(prompt,articulationSchema,articulationFailure),new Set(packet.facts.map(item=>item.id)))
- const {data:prior,error:priorError}=await admin.from('narrative_sections').select('id,section_type,version').eq('workspace_id',job.workspace_id).eq('project_id',job.project_id).order('version',{ascending:false});if(priorError)throw priorError;const latest=new Map<string,{id:string;version:number}>();for(const row of prior||[])if(!latest.has(row.section_type))latest.set(row.section_type,{id:row.id,version:row.version||1})
- const rows=sectionTypes.map(section_type=>{const value=output[section_type],previous=latest.get(section_type);return{workspace_id:job.workspace_id,project_id:job.project_id,extraction_job_id:job.id,section_type,draft_text:value.text,basis_type:value.basis_type,supporting_item_ids:value.source_fact_ids,team_input_keys:value.team_input_refs.map(ref=>teamRefToKey[ref]),version:(previous?.version||0)+1,supersedes_id:previous?.id||null,status:'draft',needs_refresh:false,stale_reason:null,created_by:job.created_by}})
- const {error}=await admin.from('narrative_sections').insert(rows);if(error)throw error;return rows.length
+async function projectPacket(job: Job, includeReviewable: boolean) {
+  const [
+    { data: project, error: projectError },
+    { data: items, error: itemError },
+    { data: sources, error: sourceError },
+  ] = await Promise.all([
+    admin
+      .from("projects")
+      .select("project_name,data")
+      .eq("workspace_id", job.workspace_id)
+      .eq("id", job.project_id)
+      .single(),
+    admin
+      .from("knowledge_items")
+      .select(
+        "id,category,field,structured_field,value,status,conflict_group_id",
+      )
+      .eq("workspace_id", job.workspace_id)
+      .eq("project_id", job.project_id)
+      .in(
+        "status",
+        includeReviewable ? ["accepted", "review_needed"] : ["accepted"],
+      )
+      .order("created_at"),
+    admin
+      .from("knowledge_item_sources")
+      .select(
+        "knowledge_item_id,source_asset_id,source_page,exact_evidence_quote",
+      )
+      .eq("workspace_id", job.workspace_id)
+      .eq("project_id", job.project_id),
+  ]);
+  if (projectError) throw projectError;
+  if (itemError) throw itemError;
+  if (sourceError) throw sourceError;
+  const conflictCounts = new Map<string, Set<string>>();
+  for (const item of items || []) {
+    if (!item.conflict_group_id) continue;
+    const values =
+      conflictCounts.get(item.conflict_group_id) || new Set<string>();
+    values.add(item.value);
+    conflictCounts.set(item.conflict_group_id, values);
+  }
+  const facts = (items || [])
+    .filter(
+      (item) =>
+        !item.conflict_group_id ||
+        conflictCounts.get(item.conflict_group_id)?.size === 1,
+    )
+    .map((item) => ({
+      ...item,
+      sources: (sources || []).filter(
+        (source) => source.knowledge_item_id === item.id,
+      ),
+    })) as Fact[];
+  const data = (project.data || {}) as Json;
+  const knowledge = (data.knowledge || {}) as Json;
+  const manualFacts = Array.isArray(knowledge.facts)
+    ? knowledge.facts
+        .filter(
+          (item) =>
+            item &&
+            typeof item === "object" &&
+            (item as Json).status === "reviewed",
+        )
+        .map((item) => ({
+          field: (item as Json).key,
+          value: (item as Json).value,
+          origin: "manual_approved",
+        }))
+    : [];
+  const team = (knowledge.teamInput || {}) as Json;
+  const teamInput = {
+    challenge_or_opportunity_input: String(team.challengeOpportunity || ""),
+    response_input: String(team.teamResponse || ""),
+    future_relevance_input: String(team.futureRelevance || ""),
+  };
+  return { project, facts, manualFacts, teamInput };
 }
 
-function buildBatches(pages:PageRecord[]){const batches:string[]=[];let current='';for(const page of pages){for(let start=0;start<Math.max(1,page.extracted_text.length);start+=70000){const labelled=`[Page ${page.page_number}]\n${page.extracted_text.slice(start,start+70000)}\n`;if(current&&current.length+labelled.length>80000){batches.push(current);current=''}current+=labelled}}if(current)batches.push(current);return batches}
-
-async function regenerateNarrative(job:Job){await admin.from('ingestion_jobs').update({status:'analysing'}).eq('id',job.id);const count=await synthesize(job,false);const completedAt=new Date().toISOString();await admin.from('ingestion_jobs').update({status:'ready_for_review',completed_at:completedAt,analysed_at:completedAt,failure_reason:null,model_name:geminiModel}).eq('id',job.id);await audit(job,'narrative.regenerated',{componentCount:count})}
-
-async function processJob(job:Job){
- if(job.narrative_only)return regenerateNarrative(job)
- const {data:asset,error:assetError}=await admin.from('assets').select('storage_path,file_size').eq('workspace_id',job.workspace_id).eq('project_id',job.project_id).eq('id',job.source_asset_id).single();if(assetError||!asset?.storage_path)throw new UserError(genericFailure);if(typeof asset.file_size==='number'&&asset.file_size>20*1024*1024)throw new UserError(largePdfMessage)
- const {data:file,error:downloadError}=await admin.storage.from('project-assets').download(asset.storage_path);if(downloadError||!file)throw new UserError(genericFailure);if(file.size>20*1024*1024)throw new UserError(largePdfMessage)
- const pdf=await getDocument({data:new Uint8Array(await file.arrayBuffer()),useWorkerFetch:false}).promise;if(pdf.numPages>100)throw new UserError(largePdfMessage)
- const extracted:{page_number:number;extracted_text:string;normalised_text:string;character_count:number}[]=[];for(let pageNumber=1;pageNumber<=pdf.numPages;pageNumber++){const page=await pdf.getPage(pageNumber);const content=await page.getTextContent();const text=content.items.map(item=>'str'in item?item.str:'').join(' ').replace(/\s+/g,' ').trim();extracted.push({page_number:pageNumber,extracted_text:text,normalised_text:normalise(text),character_count:text.length})}if(!extracted.some(page=>page.normalised_text.length>=20))throw new UserError(emptyPdfMessage)
- const {data:storedPages,error:pageError}=await admin.from('source_pages').insert(extracted.map(page=>({workspace_id:job.workspace_id,project_id:job.project_id,extraction_job_id:job.id,source_asset_id:job.source_asset_id,...page}))).select('id,page_number,extracted_text,normalised_text');if(pageError)throw pageError
- const chunks=(storedPages||[]).flatMap(page=>{const rows=[];for(let start=0,index=0;start<page.extracted_text.length;start+=20000,index++){const text=page.extracted_text.slice(start,start+20000);rows.push({workspace_id:job.workspace_id,project_id:job.project_id,extraction_job_id:job.id,source_page_id:page.id,chunk_index:index,text,normalised_text:normalise(text)})}return rows});if(chunks.length){const {error}=await admin.from('source_chunks').insert(chunks);if(error)throw error}
- await admin.from('ingestion_jobs').update({status:'analysing'}).eq('id',job.id);const extractedCandidates:Candidate[]=[];for(const batch of buildBatches(storedPages as PageRecord[]))extractedCandidates.push(...await extract(batch));await admin.from('ingestion_jobs').update({status:'validating'}).eq('id',job.id)
- const verified=validateCandidateEvidence(extractedCandidates,storedPages as PageRecord[]) as Candidate[];const grouped=new Map<string,{candidate:Candidate;structured:string;sources:{source_page:number;exact_evidence_quote:string}[]}>();for(const item of verified){const structured=canonicalField(item.field);if(!structured)continue;const key=`${structured}|${equivalentValue(structured,item.value)}`;const source={source_page:item.source_page,exact_evidence_quote:item.exact_evidence_quote};const existing=grouped.get(key);if(existing){if(!existing.sources.some(value=>value.source_page===source.source_page&&value.exact_evidence_quote===source.exact_evidence_quote))existing.sources.push(source)}else grouped.set(key,{candidate:item,structured,sources:[source]})}
- const valuesByField=new Map<string,Set<string>>();for(const value of grouped.values()){const values=valuesByField.get(value.structured)||new Set<string>();values.add(equivalentValue(value.structured,value.candidate.value));valuesByField.set(value.structured,values)}const conflictIds=new Map<string,string>();for(const [field,values] of valuesByField)if(values.size>1)conflictIds.set(field,crypto.randomUUID())
- const {data:existing,error:existingError}=await admin.from('knowledge_items').select('id,structured_field,normalised_value,value').eq('workspace_id',job.workspace_id).eq('project_id',job.project_id).neq('status','superseded');if(existingError)throw existingError
- let created=0;for(const value of grouped.values()){let item=(existing||[]).find(row=>row.structured_field===value.structured&&equivalentValue(value.structured,row.value)===equivalentValue(value.structured,value.candidate.value));if(!item){const {data,error}=await admin.from('knowledge_items').insert({workspace_id:job.workspace_id,project_id:job.project_id,extraction_job_id:job.id,category:value.candidate.category,field:value.candidate.field,structured_field:value.structured,value:value.candidate.value,normalised_value:normalise(value.candidate.value),status:'review_needed',source_type:'document',conflict_group_id:conflictIds.get(value.structured)||null,original_extracted_value:value.candidate.value,created_by:job.created_by}).select('id,structured_field,normalised_value,value').single();if(error)throw error;item=data;created++}for(const source of value.sources){const {data:prior,error:readError}=await admin.from('knowledge_item_sources').select('id').eq('workspace_id',job.workspace_id).eq('knowledge_item_id',item.id).eq('source_asset_id',job.source_asset_id).eq('source_page',source.source_page).eq('exact_evidence_quote',source.exact_evidence_quote).maybeSingle();if(readError)throw readError;if(!prior){const {error}=await admin.from('knowledge_item_sources').insert({workspace_id:job.workspace_id,project_id:job.project_id,knowledge_item_id:item.id,source_asset_id:job.source_asset_id,...source});if(error)throw error}}}
- let narrativeCount=0;try{narrativeCount=await synthesize(job,true)}catch(error){if(!(error instanceof UserError)||error.message!==articulationFailure)throw error;await audit(job,'narrative.generation_failed',{reason:articulationFailure})}
- const completedAt=new Date().toISOString();await admin.from('ingestion_jobs').update({status:'ready_for_review',completed_at:completedAt,analysed_at:completedAt,failure_reason:narrativeCount?null:articulationFailure,model_name:geminiModel}).eq('id',job.id);await audit(job,'document.analysis_completed',{candidateCount:grouped.size,createdCandidateCount:created,narrativeCount,pageCount:pdf.numPages})
+async function synthesize(job: Job, includeReviewable: boolean) {
+  const packet = await projectPacket(job, includeReviewable);
+  if (
+    !packet.facts.length &&
+    !packet.manualFacts.length &&
+    !Object.values(packet.teamInput).some(Boolean)
+  )
+    throw new UserError(articulationFailure);
+  const prompt = `You are Folion's evidence-led project writing engine. Return strict JSON containing only project_summary and project_narrative. Reason internally through the challenge, response, distinctive strength and future relevance, but never expose those as separate outputs. Write new, project-specific professional language: do not copy report sentences, concatenate Team Input, or merely grammar-correct it. Project Summary should orient an unfamiliar reader to what the project is, why the practice was engaged, its place, type, relevant scale, core condition and practice role; target 80-140 words where supported. Project Narrative must be one coherent strategic story answering what was at stake, what the team did, what was distinctive, and why the project is useful precedent; target 140-240 words where supported. Project Summary may use only source-supported or approved manual facts. Team Input is strategic context, never verified factual evidence. Every factual assertion must cite source_fact_ids. Use fewer words rather than filler. Avoid generic praise and never invent outcomes, delivery, awards, people, roles, status, metrics, client satisfaction or success.\n\nProject knowledge packet:\n${JSON.stringify({ project_name: packet.project.project_name, validated_source_supported_facts: packet.facts, approved_manual_project_facts: packet.manualFacts, original_team_input: packet.teamInput })}`;
+  const output = validateProjectText(
+    await gemini(prompt, articulationSchema, articulationFailure),
+    new Set(packet.facts.map((item) => item.id)),
+  );
+  const { data: prior, error: priorError } = await admin
+    .from("narrative_sections")
+    .select("id,section_type,version")
+    .eq("workspace_id", job.workspace_id)
+    .eq("project_id", job.project_id)
+    .order("version", { ascending: false });
+  if (priorError) throw priorError;
+  const latest = new Map<string, { id: string; version: number }>();
+  for (const row of prior || [])
+    if (!latest.has(row.section_type))
+      latest.set(row.section_type, { id: row.id, version: row.version || 1 });
+  const rows = sectionTypes.map((section_type) => {
+    const value = output[section_type],
+      previous = latest.get(section_type);
+    return {
+      workspace_id: job.workspace_id,
+      project_id: job.project_id,
+      extraction_job_id: job.id,
+      section_type,
+      draft_text: value.text,
+      basis_type: value.basis_type,
+      supporting_item_ids: value.source_fact_ids,
+      team_input_keys: value.team_input_refs.map((ref) => teamRefToKey[ref]),
+      version: (previous?.version || 0) + 1,
+      supersedes_id: previous?.id || null,
+      status: "draft",
+      needs_refresh: false,
+      stale_reason: null,
+      created_by: job.created_by,
+    };
+  });
+  const { error } = await admin.from("narrative_sections").insert(rows);
+  if (error) throw error;
+  return rows.length;
 }
 
-async function nextJob(){const fields='id,workspace_id,project_id,source_asset_id,created_by,narrative_only';const {data,error}=await admin.from('ingestion_jobs').select(fields).eq('status','queued').order('created_at').limit(1).maybeSingle();if(error)throw error;if(!data)return null;const startedAt=new Date().toISOString();const {data:claimed,error:claimError}=await admin.from('ingestion_jobs').update({status:'extracting_text',started_at:startedAt,failure_reason:null}).eq('id',data.id).eq('status','queued').select(fields).maybeSingle();if(claimError)throw claimError;return claimed as Job|null}
+function buildBatches(pages: PageRecord[]) {
+  const batches: string[] = [];
+  let current = "";
+  for (const page of pages) {
+    for (
+      let start = 0;
+      start < Math.max(1, page.extracted_text.length);
+      start += 70000
+    ) {
+      const labelled = `[Page ${page.page_number}]\n${page.extracted_text.slice(start, start + 70000)}\n`;
+      if (current && current.length + labelled.length > 80000) {
+        batches.push(current);
+        current = "";
+      }
+      current += labelled;
+    }
+  }
+  if (current) batches.push(current);
+  return batches;
+}
 
-async function nextTenderJob(){const fields='id,workspace_id,package_id,package_source_id,created_by';const {data,error}=await admin.from('tender_analysis_jobs').select(fields).eq('status','queued').order('created_at').limit(1).maybeSingle();if(error)throw error;if(!data)return null;const {data:claimed,error:claimError}=await admin.from('tender_analysis_jobs').update({status:'extracting_text',started_at:new Date().toISOString(),failure_reason:null}).eq('id',data.id).eq('status','queued').select(fields).maybeSingle();if(claimError)throw claimError;return claimed as TenderJob|null}
+async function regenerateNarrative(job: Job) {
+  await admin
+    .from("ingestion_jobs")
+    .update({ status: "analysing" })
+    .eq("id", job.id);
+  const count = await synthesize(job, false);
+  const completedAt = new Date().toISOString();
+  await admin
+    .from("ingestion_jobs")
+    .update({
+      status: "ready_for_review",
+      completed_at: completedAt,
+      analysed_at: completedAt,
+      failure_reason: null,
+      model_name: geminiModel,
+    })
+    .eq("id", job.id);
+  await audit(job, "narrative.regenerated", { componentCount: count });
+}
 
-async function processTenderJob(job:TenderJob){const {data:source,error:sourceError}=await admin.from('package_sources').select('storage_path,file_size').eq('workspace_id',job.workspace_id).eq('package_id',job.package_id).eq('id',job.package_source_id).single();if(sourceError||!source?.storage_path)throw new UserError(genericFailure);if(typeof source.file_size==='number'&&source.file_size>20*1024*1024)throw new UserError(largePdfMessage);const {data:file,error:downloadError}=await admin.storage.from('project-assets').download(source.storage_path);if(downloadError||!file)throw new UserError(genericFailure);const pdf=await getDocument({data:new Uint8Array(await file.arrayBuffer()),useWorkerFetch:false}).promise;if(pdf.numPages>150)throw new UserError(largePdfMessage);const pages:{page_number:number;extracted_text:string;character_count:number}[]=[];for(let pageNumber=1;pageNumber<=pdf.numPages;pageNumber++){const page=await pdf.getPage(pageNumber),content=await page.getTextContent(),text=content.items.map(item=>'str'in item?item.str:'').join(' ').replace(/\s+/g,' ').trim();pages.push({page_number:pageNumber,extracted_text:text,character_count:text.length})}if(!pages.some(page=>page.character_count>=20))throw new UserError(emptyPdfMessage);const {error:pageError}=await admin.from('tender_source_pages').insert(pages.map(page=>({workspace_id:job.workspace_id,package_id:job.package_id,tender_analysis_job_id:job.id,...page})));if(pageError)throw pageError;await admin.from('tender_analysis_jobs').update({status:'analysing'}).eq('id',job.id);const batches=buildBatches(pages.map((page,index)=>({id:String(index),normalised_text:normalise(page.extracted_text),...page})));const partials:Json[]=[];for(const batch of batches){const prompt=`Analyse this page-labelled tender text. Return only information explicitly supported by the tender. Do not invent commitments, experience, people, projects or credentials. Empty strings and arrays are valid when the text does not support an answer. Preserve important criteria, mandatory requirements, programme constraints and response headings.\n\n${batch}`;partials.push(await gemini(prompt,tenderSchema,genericFailure) as Json)}const synthesisPrompt=`Combine these batch-level tender analyses into one faithful Tender Understanding. Deduplicate repeated information. Do not add any claim not present in the batch analyses. Return the required JSON schema only.\n\n${JSON.stringify(partials)}`;const analysis=await gemini(synthesisPrompt,tenderSchema,genericFailure);const completedAt=new Date().toISOString();const {error:updateError}=await admin.from('tender_analysis_jobs').update({status:'ready_for_review',analysis,model_name:geminiModel,completed_at:completedAt}).eq('id',job.id);if(updateError)throw updateError;const {data:storedPackage}=await admin.from('packages').select('data').eq('workspace_id',job.workspace_id).eq('id',job.package_id).single();await admin.from('packages').update({data:{...storedPackage?.data,tenderAnalysisJobId:job.id,tenderUnderstanding:analysis}}).eq('workspace_id',job.workspace_id).eq('id',job.package_id);await admin.from('audit_events').insert({workspace_id:job.workspace_id,actor_user_id:job.created_by,action:'tender.analysis_completed',entity_type:'package',entity_id:job.package_id,metadata:{jobId:job.id,pageCount:pdf.numPages,batchCount:batches.length}})}
+async function processJob(job: Job) {
+  if (job.narrative_only) return regenerateNarrative(job);
+  const { data: asset, error: assetError } = await admin
+    .from("assets")
+    .select("storage_path,file_size")
+    .eq("workspace_id", job.workspace_id)
+    .eq("project_id", job.project_id)
+    .eq("id", job.source_asset_id)
+    .single();
+  if (assetError || !asset?.storage_path) throw new UserError(genericFailure);
+  if (typeof asset.file_size === "number" && asset.file_size > 20 * 1024 * 1024)
+    throw new UserError(largePdfMessage);
+  const { data: file, error: downloadError } = await admin.storage
+    .from("project-assets")
+    .download(asset.storage_path);
+  if (downloadError || !file) throw new UserError(genericFailure);
+  if (file.size > 20 * 1024 * 1024) throw new UserError(largePdfMessage);
+  const pdf = await getDocument({
+    data: new Uint8Array(await file.arrayBuffer()),
+    useWorkerFetch: false,
+  }).promise;
+  if (pdf.numPages > 100) throw new UserError(largePdfMessage);
+  const extracted: {
+    page_number: number;
+    extracted_text: string;
+    normalised_text: string;
+    character_count: number;
+  }[] = [];
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+    const page = await pdf.getPage(pageNumber);
+    const content = await page.getTextContent();
+    const text = content.items
+      .map((item) => ("str" in item ? item.str : ""))
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    extracted.push({
+      page_number: pageNumber,
+      extracted_text: text,
+      normalised_text: normalise(text),
+      character_count: text.length,
+    });
+  }
+  if (!extracted.some((page) => page.normalised_text.length >= 20))
+    throw new UserError(emptyPdfMessage);
+  const { data: storedPages, error: pageError } = await admin
+    .from("source_pages")
+    .insert(
+      extracted.map((page) => ({
+        workspace_id: job.workspace_id,
+        project_id: job.project_id,
+        extraction_job_id: job.id,
+        source_asset_id: job.source_asset_id,
+        ...page,
+      })),
+    )
+    .select("id,page_number,extracted_text,normalised_text");
+  if (pageError) throw pageError;
+  const chunks = (storedPages || []).flatMap((page) => {
+    const rows = [];
+    for (
+      let start = 0, index = 0;
+      start < page.extracted_text.length;
+      start += 20000, index++
+    ) {
+      const text = page.extracted_text.slice(start, start + 20000);
+      rows.push({
+        workspace_id: job.workspace_id,
+        project_id: job.project_id,
+        extraction_job_id: job.id,
+        source_page_id: page.id,
+        chunk_index: index,
+        text,
+        normalised_text: normalise(text),
+      });
+    }
+    return rows;
+  });
+  if (chunks.length) {
+    const { error } = await admin.from("source_chunks").insert(chunks);
+    if (error) throw error;
+  }
+  await admin
+    .from("ingestion_jobs")
+    .update({ status: "analysing" })
+    .eq("id", job.id);
+  const extractedCandidates: Candidate[] = [];
+  for (const batch of buildBatches(storedPages as PageRecord[]))
+    extractedCandidates.push(...(await extract(batch)));
+  await admin
+    .from("ingestion_jobs")
+    .update({ status: "validating" })
+    .eq("id", job.id);
+  const verified = validateCandidateEvidence(
+    extractedCandidates,
+    storedPages as PageRecord[],
+  ) as Candidate[];
+  const grouped = new Map<
+    string,
+    {
+      candidate: Candidate;
+      structured: string;
+      sources: { source_page: number; exact_evidence_quote: string }[];
+    }
+  >();
+  for (const item of verified) {
+    const structured = canonicalField(item.field);
+    if (!structured) continue;
+    const key = `${structured}|${equivalentValue(structured, item.value)}`;
+    const source = {
+      source_page: item.source_page,
+      exact_evidence_quote: item.exact_evidence_quote,
+    };
+    const existing = grouped.get(key);
+    if (existing) {
+      if (
+        !existing.sources.some(
+          (value) =>
+            value.source_page === source.source_page &&
+            value.exact_evidence_quote === source.exact_evidence_quote,
+        )
+      )
+        existing.sources.push(source);
+    } else grouped.set(key, { candidate: item, structured, sources: [source] });
+  }
+  const valuesByField = new Map<string, Set<string>>();
+  for (const value of grouped.values()) {
+    const values = valuesByField.get(value.structured) || new Set<string>();
+    values.add(equivalentValue(value.structured, value.candidate.value));
+    valuesByField.set(value.structured, values);
+  }
+  const conflictIds = new Map<string, string>();
+  for (const [field, values] of valuesByField)
+    if (values.size > 1) conflictIds.set(field, crypto.randomUUID());
+  const { data: existing, error: existingError } = await admin
+    .from("knowledge_items")
+    .select("id,structured_field,normalised_value,value")
+    .eq("workspace_id", job.workspace_id)
+    .eq("project_id", job.project_id)
+    .neq("status", "superseded");
+  if (existingError) throw existingError;
+  let created = 0;
+  for (const value of grouped.values()) {
+    let item = (existing || []).find(
+      (row) =>
+        row.structured_field === value.structured &&
+        equivalentValue(value.structured, row.value) ===
+          equivalentValue(value.structured, value.candidate.value),
+    );
+    if (!item) {
+      const { data, error } = await admin
+        .from("knowledge_items")
+        .insert({
+          workspace_id: job.workspace_id,
+          project_id: job.project_id,
+          extraction_job_id: job.id,
+          category: value.candidate.category,
+          field: value.candidate.field,
+          structured_field: value.structured,
+          value: value.candidate.value,
+          normalised_value: normalise(value.candidate.value),
+          status: "review_needed",
+          source_type: "document",
+          conflict_group_id: conflictIds.get(value.structured) || null,
+          original_extracted_value: value.candidate.value,
+          created_by: job.created_by,
+        })
+        .select("id,structured_field,normalised_value,value")
+        .single();
+      if (error) throw error;
+      item = data;
+      created++;
+    }
+    for (const source of value.sources) {
+      const { data: prior, error: readError } = await admin
+        .from("knowledge_item_sources")
+        .select("id")
+        .eq("workspace_id", job.workspace_id)
+        .eq("knowledge_item_id", item.id)
+        .eq("source_asset_id", job.source_asset_id)
+        .eq("source_page", source.source_page)
+        .eq("exact_evidence_quote", source.exact_evidence_quote)
+        .maybeSingle();
+      if (readError) throw readError;
+      if (!prior) {
+        const { error } = await admin
+          .from("knowledge_item_sources")
+          .insert({
+            workspace_id: job.workspace_id,
+            project_id: job.project_id,
+            knowledge_item_id: item.id,
+            source_asset_id: job.source_asset_id,
+            ...source,
+          });
+        if (error) throw error;
+      }
+    }
+  }
+  let narrativeCount = 0;
+  try {
+    narrativeCount = await synthesize(job, true);
+  } catch (error) {
+    if (!(error instanceof UserError) || error.message !== articulationFailure)
+      throw error;
+    await audit(job, "narrative.generation_failed", {
+      reason: articulationFailure,
+    });
+  }
+  const completedAt = new Date().toISOString();
+  await admin
+    .from("ingestion_jobs")
+    .update({
+      status: "ready_for_review",
+      completed_at: completedAt,
+      analysed_at: completedAt,
+      failure_reason: narrativeCount ? null : articulationFailure,
+      model_name: geminiModel,
+    })
+    .eq("id", job.id);
+  await audit(job, "document.analysis_completed", {
+    candidateCount: grouped.size,
+    createdCandidateCount: created,
+    narrativeCount,
+    pageCount: pdf.numPages,
+  });
+}
 
-let stopping=false;process.on('SIGTERM',()=>{stopping=true});process.on('SIGINT',()=>{stopping=true})
-async function run(){while(!stopping){let job:Job|null=null,tenderJob:TenderJob|null=null;try{tenderJob=await nextTenderJob();if(tenderJob){await processTenderJob(tenderJob);continue}job=await nextJob();if(!job){await new Promise(resolve=>setTimeout(resolve,2500));continue}await processJob(job)}catch(error){console.error(error);const reason=error instanceof UserError?error.message:genericFailure;if(tenderJob){await admin.from('tender_analysis_jobs').update({status:'failed',failure_reason:reason,completed_at:new Date().toISOString()}).eq('id',tenderJob.id);await admin.from('audit_events').insert({workspace_id:tenderJob.workspace_id,actor_user_id:tenderJob.created_by,action:'tender.analysis_failed',entity_type:'package',entity_id:tenderJob.package_id,metadata:{jobId:tenderJob.id,reason}})}else if(job){await admin.from('ingestion_jobs').update({status:'failed',failure_reason:reason,completed_at:new Date().toISOString()}).eq('id',job.id);await audit(job,'document.analysis_failed',{reason})}else await new Promise(resolve=>setTimeout(resolve,2500))}}}
-void run()
+async function nextJob() {
+  const fields =
+    "id,workspace_id,project_id,source_asset_id,created_by,narrative_only";
+  const { data, error } = await admin
+    .from("ingestion_jobs")
+    .select(fields)
+    .eq("status", "queued")
+    .order("created_at")
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const startedAt = new Date().toISOString();
+  const { data: claimed, error: claimError } = await admin
+    .from("ingestion_jobs")
+    .update({
+      status: "extracting_text",
+      started_at: startedAt,
+      failure_reason: null,
+    })
+    .eq("id", data.id)
+    .eq("status", "queued")
+    .select(fields)
+    .maybeSingle();
+  if (claimError) throw claimError;
+  return claimed as Job | null;
+}
+
+async function nextTenderJob() {
+  const fields = "id,workspace_id,package_id,package_source_id,created_by";
+  const { data, error } = await admin
+    .from("tender_analysis_jobs")
+    .select(fields)
+    .eq("status", "queued")
+    .order("created_at")
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const { data: claimed, error: claimError } = await admin
+    .from("tender_analysis_jobs")
+    .update({
+      status: "extracting_text",
+      started_at: new Date().toISOString(),
+      failure_reason: null,
+    })
+    .eq("id", data.id)
+    .eq("status", "queued")
+    .select(fields)
+    .maybeSingle();
+  if (claimError) throw claimError;
+  return claimed as TenderJob | null;
+}
+
+async function processTenderJob(job: TenderJob) {
+  const { data: source, error: sourceError } = await admin
+    .from("package_sources")
+    .select("storage_path,file_size,source_type,mime_type")
+    .eq("workspace_id", job.workspace_id)
+    .eq("package_id", job.package_id)
+    .eq("id", job.package_source_id)
+    .single();
+  if (sourceError || !source?.storage_path) throw new UserError(genericFailure);
+  if (
+    typeof source.file_size === "number" &&
+    source.file_size > 20 * 1024 * 1024
+  )
+    throw new UserError(largePdfMessage);
+  const { data: file, error: downloadError } = await admin.storage
+    .from("project-assets")
+    .download(source.storage_path);
+  if (downloadError || !file) throw new UserError(genericFailure);
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const pages: {
+    page_number: number;
+    extracted_text: string;
+    character_count: number;
+  }[] = [];
+  if (source.source_type === "tender_docx") {
+    const extracted = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
+    const sections = extracted.value
+      .split(/\n\s*\n+/)
+      .map((value) => value.replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    for (let start = 0, section = 1; start < sections.length; start += 20) {
+      const text = sections.slice(start, start + 20).join("\n\n");
+      pages.push({ page_number: section++, extracted_text: text, character_count: text.length });
+    }
+  } else {
+    const pdf = await getDocument({ data: bytes, useWorkerFetch: false }).promise;
+    if (pdf.numPages > 150) throw new UserError(largePdfMessage);
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+      const page = await pdf.getPage(pageNumber),
+        content = await page.getTextContent(),
+        text = content.items
+          .map((item) => ("str" in item ? item.str : ""))
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim();
+      pages.push({ page_number: pageNumber, extracted_text: text, character_count: text.length });
+    }
+  }
+  if (!pages.some((page) => page.character_count >= 20))
+    throw new UserError(emptyPdfMessage);
+  const { error: pageError } = await admin
+    .from("tender_source_pages")
+    .insert(
+      pages.map((page) => ({
+        workspace_id: job.workspace_id,
+        package_id: job.package_id,
+        tender_analysis_job_id: job.id,
+        ...page,
+      })),
+    );
+  if (pageError) throw pageError;
+  await admin
+    .from("tender_analysis_jobs")
+    .update({ status: "analysing" })
+    .eq("id", job.id);
+  const batches = buildBatches(
+    pages.map((page, index) => ({
+      id: String(index),
+      normalised_text: normalise(page.extracted_text),
+      ...page,
+    })),
+  );
+  const partials: Json[] = [];
+  for (const batch of batches) {
+    const prompt = `Analyse this page-labelled tender text. Return only information explicitly supported by the tender. Do not invent commitments, experience, people, projects or credentials. Empty strings and arrays are valid when the text does not support an answer. Preserve important criteria, mandatory requirements, programme constraints and response headings.\n\n${batch}`;
+    partials.push((await gemini(prompt, tenderSchema, genericFailure)) as Json);
+  }
+  const synthesisPrompt = `Combine these batch-level tender analyses into one faithful Tender Understanding. Deduplicate repeated information. Do not add any claim not present in the batch analyses. Return the required JSON schema only.\n\n${JSON.stringify(partials)}`;
+  const analysis = await gemini(synthesisPrompt, tenderSchema, genericFailure);
+  const completedAt = new Date().toISOString();
+  const { error: updateError } = await admin
+    .from("tender_analysis_jobs")
+    .update({
+      status: "ready_for_review",
+      analysis,
+      model_name: geminiModel,
+      completed_at: completedAt,
+    })
+    .eq("id", job.id);
+  if (updateError) throw updateError;
+  const { data: storedPackage } = await admin
+    .from("packages")
+    .select("data")
+    .eq("workspace_id", job.workspace_id)
+    .eq("id", job.package_id)
+    .single();
+  await admin
+    .from("packages")
+    .update({
+      data: {
+        ...storedPackage?.data,
+        tenderAnalysisJobId: job.id,
+        tenderUnderstanding: analysis,
+      },
+    })
+    .eq("workspace_id", job.workspace_id)
+    .eq("id", job.package_id);
+  await admin
+    .from("audit_events")
+    .insert({
+      workspace_id: job.workspace_id,
+      actor_user_id: job.created_by,
+      action: "tender.analysis_completed",
+      entity_type: "package",
+      entity_id: job.package_id,
+      metadata: {
+        jobId: job.id,
+        pageCount: pages.length,
+        batchCount: batches.length,
+      },
+    });
+}
+
+let stopping = false;
+process.on("SIGTERM", () => {
+  stopping = true;
+});
+process.on("SIGINT", () => {
+  stopping = true;
+});
+async function run() {
+  while (!stopping) {
+    let job: Job | null = null,
+      tenderJob: TenderJob | null = null;
+    try {
+      tenderJob = await nextTenderJob();
+      if (tenderJob) {
+        await processTenderJob(tenderJob);
+        continue;
+      }
+      job = await nextJob();
+      if (!job) {
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+        continue;
+      }
+      await processJob(job);
+    } catch (error) {
+      console.error(error);
+      const reason =
+        error instanceof UserError ? error.message : genericFailure;
+      if (tenderJob) {
+        await admin
+          .from("tender_analysis_jobs")
+          .update({
+            status: "failed",
+            failure_reason: reason,
+            completed_at: new Date().toISOString(),
+          })
+          .eq("id", tenderJob.id);
+        await admin
+          .from("audit_events")
+          .insert({
+            workspace_id: tenderJob.workspace_id,
+            actor_user_id: tenderJob.created_by,
+            action: "tender.analysis_failed",
+            entity_type: "package",
+            entity_id: tenderJob.package_id,
+            metadata: { jobId: tenderJob.id, reason },
+          });
+      } else if (job) {
+        await admin
+          .from("ingestion_jobs")
+          .update({
+            status: "failed",
+            failure_reason: reason,
+            completed_at: new Date().toISOString(),
+          })
+          .eq("id", job.id);
+        await audit(job, "document.analysis_failed", { reason });
+      } else await new Promise((resolve) => setTimeout(resolve, 2500));
+    }
+  }
+}
+void run();
