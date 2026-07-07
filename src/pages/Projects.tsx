@@ -18,6 +18,7 @@ export default function Projects(){
   const [filter,setFilter]=useState('All')
   const [collectionModal,setCollectionModal]=useState(false)
   const [collectionName,setCollectionName]=useState('')
+  const [collectionBrief,setCollectionBrief]=useState('')
   const activeProjects=normalizeProjects(projects).filter(project=>project.status!=='Archived')
   const internalCount=activeProjects.filter(project=>project.confidentiality==='internal-only').length
   const externalCount=activeProjects.filter(project=>project.confidentiality==='externally-shareable').length
@@ -33,7 +34,7 @@ export default function Projects(){
   }),[activeProjects,query,filter])
 
   const resetSearch=()=>{setQuery('');setFilter('All')}
-  const create=()=>{if(!collectionName.trim())return;createCollection(collectionName.trim());setCollectionName('');setCollectionModal(false)}
+  const create=async()=>{if(!collectionName.trim())return;await createCollection(collectionName.trim(),collectionBrief.trim());setCollectionName('');setCollectionBrief('');setCollectionModal(false)}
 
   return <div>
     {notice&&<div className="auth-message mb-5" role="status">{notice}</div>}
@@ -55,6 +56,6 @@ export default function Projects(){
     <section className="workspace-section"><div className="workspace-heading"><div><p className="eyebrow">{isExploring?'Ask Folion':'Workspace'}</p><h2 className="section-title mt-2">{isExploring?'Project matches':'All projects'}</h2><p>{isExploring?'Select a project, refine the search, or open its full memory.':'Select cards to curate, review confidentiality or archive work.'}</p></div><span className="project-count">{results.length} project{results.length!==1?'s':''}</span></div>{results.length?<div className="projects-grid">{results.map(project=><ProjectCard key={project.id} project={project}/>)}</div>:<EmptyState title="No project memory found" body="Try a broader phrase, another place, or a project service." action={<Button variant="ghost" onClick={resetSearch}>Reset search</Button>}/>}</section>
 
     <BottomSelectionBar/>
-    <Modal open={collectionModal} onClose={()=>setCollectionModal(false)} title="Create a collection"><p className="text-sm text-black/50 -mt-2 mb-6">Start with a name. You can add projects from the workspace next.</p><label className="label">Collection name<input autoFocus value={collectionName} onChange={event=>setCollectionName(event.target.value)} onKeyDown={event=>event.key==='Enter'&&create()} placeholder="e.g. Civic life"/></label><div className="flex justify-end gap-2 mt-6"><Button variant="ghost" onClick={()=>setCollectionModal(false)}>Cancel</Button><Button disabled={!collectionName.trim()} onClick={create}>Create collection</Button></div></Modal>
+    <Modal open={collectionModal} onClose={()=>setCollectionModal(false)} title="Create a collection"><p className="text-sm text-black/50 -mt-2 mb-6">Name the collection and optionally describe the purpose, client context or narrative intention.</p><label className="label">Collection Title<input autoFocus value={collectionName} onChange={event=>setCollectionName(event.target.value)} placeholder="e.g. Place-Led Urban Transformation"/></label><label className="label mt-4">Collection Brief<textarea value={collectionBrief} onChange={event=>setCollectionBrief(event.target.value)} placeholder="What should this collection prove, and for whom?"/></label><div className="flex justify-end gap-2 mt-6"><Button variant="ghost" onClick={()=>setCollectionModal(false)}>Cancel</Button><Button disabled={!collectionName.trim()} onClick={()=>void create()}>Create collection</Button></div></Modal>
   </div>
 }
