@@ -11,7 +11,7 @@ import {useAuth} from '../auth'
 const nav=[
   ['/home','Home',Home],
   ['/projects','Projects',FolderKanban],
-  ['/studio','Studio',Sparkles],
+  ['/studio-v2','Studio',Sparkles],
   ['/folion-id','Folion ID',IdCard],
   ['/magazine','Magazine',BookOpen],
 ] as const
@@ -20,7 +20,7 @@ const routeTitles:Record<string,{eyebrow:string;title:string}>={
   '/home':{eyebrow:'Practice memory',title:'Home'},
   '/projects':{eyebrow:'Practice memory',title:'Projects'},
   '/new-project':{eyebrow:'Practice memory',title:'New project'},
-  '/studio':{eyebrow:'Create from memory',title:'Studio'},
+  '/studio-v2':{eyebrow:'Create from memory',title:'Studio'},
   '/folion-id':{eyebrow:'Practice profile',title:'Folion ID'},
 }
 

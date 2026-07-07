@@ -7,13 +7,14 @@ import Projects from './pages/Projects'
 import ProjectDetail from './pages/ProjectDetail'
 import NewProject from './pages/NewProjectEntry'
 import CollectionPage from './pages/Collection'
-import Studio from './pages/Studio'
-import StudioPackage from './pages/StudioPackage'
-import StudioNew from './pages/StudioNew'
 import StudioV2 from './pages/StudioV2'
 import CompanyProfile from './pages/CompanyProfile'
 import Magazine from './pages/Magazine'
 import FolionId from './pages/FolionId'
 import {AuthProvider} from './auth'
 import AuthGate from './components/AuthGate'
-export default function App(){return <AuthProvider><StoreProvider><BrowserRouter><Routes><Route path="/" element={<Landing/>}/><Route path="/sign-in" element={<AuthGate><Navigate to="/home" replace/></AuthGate>}/><Route path="/magazine" element={<Magazine/>}/><Route path="/company/:id" element={<CompanyProfile/>}/><Route element={<AuthGate><AppShell/></AuthGate>}><Route path="/home" element={<Home/>}/><Route path="/projects" element={<Projects/>}/><Route path="/projects/:id" element={<ProjectDetail/>}/><Route path="/new-project" element={<NewProject/>}/><Route path="/project-reflection" element={<Navigate to="/new-project" replace/>}/><Route path="/collections/:id" element={<CollectionPage/>}/><Route path="/studio" element={<Studio/>}/><Route path="/studio-v2" element={<StudioV2/>}/><Route path="/studio/new/:type" element={<StudioNew/>}/><Route path="/studio/:id" element={<StudioPackage/>}/><Route path="/folion-id" element={<FolionId/>}/></Route></Routes></BrowserRouter></StoreProvider></AuthProvider>}
+
+export default function App(){return <AuthProvider><StoreProvider><BrowserRouter><Routes>
+ <Route path="/" element={<Landing/>}/><Route path="/sign-in" element={<AuthGate><Navigate to="/home" replace/></AuthGate>}/><Route path="/magazine" element={<Magazine/>}/><Route path="/company/:id" element={<CompanyProfile/>}/>
+ <Route element={<AuthGate><AppShell/></AuthGate>}><Route path="/home" element={<Home/>}/><Route path="/projects" element={<Projects/>}/><Route path="/projects/:id" element={<ProjectDetail/>}/><Route path="/new-project" element={<NewProject/>}/><Route path="/project-reflection" element={<Navigate to="/new-project" replace/>}/><Route path="/collections/:id" element={<CollectionPage/>}/><Route path="/studio-v2" element={<StudioV2/>}/><Route path="/studio" element={<Navigate to="/studio-v2" replace/>}/><Route path="/studio/new/:type" element={<Navigate to="/studio-v2" replace/>}/><Route path="/studio/:id" element={<Navigate to="/studio-v2" replace/>}/><Route path="/folion-id" element={<FolionId/>}/></Route>
+ </Routes></BrowserRouter></StoreProvider></AuthProvider>}

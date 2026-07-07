@@ -6,7 +6,7 @@ import {useStore} from '../store'
 const destinations=[
   {label:'Home',hint:'Project of the day',to:'/home',icon:Home},
   {label:'Projects',hint:'Search practice memory',to:'/projects',icon:FolderKanban},
-  {label:'Studio',hint:'Create a new output',to:'/studio',icon:Sparkles},
+  {label:'Studio',hint:'Create a new output',to:'/studio-v2',icon:Sparkles},
   {label:'Folion ID',hint:'Practice and people',to:'/folion-id',icon:IdCard},
   {label:'Magazine',hint:'Browse public work',to:'/magazine',icon:BookOpen},
 ]

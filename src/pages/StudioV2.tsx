@@ -19,6 +19,7 @@ import {
 } from "../lib/project";
 import { supabase } from "../lib/supabase";
 import { useStore } from "../store";
+import {Button} from "../components/ui";
 import {
   Asset,
   Collection,
@@ -376,6 +377,10 @@ function ProjectSheetSetup({
     [service, setService] = useState(""),
     [status, setStatus] = useState(""),
     [variant, setVariant] = useState<SheetVariant>("hero"),
+    [imageZoom,setImageZoom]=useState(1),
+    [imageX,setImageX]=useState(50),
+    [imageY,setImageY]=useState(50),
+    [keyFocus,setKeyFocus]=useState(""),
     [primary, setPrimary] = useState(""),
     [support, setSupport] = useState<string[]>([]),
     [saving, setSaving] = useState(false),
@@ -397,6 +402,7 @@ function ProjectSheetSetup({
   useEffect(() => {
     if (project && !primary) setPrimary(assets[0]?.id || "");
   }, [project, assets, primary]);
+  useEffect(()=>{if(!project)return setKeyFocus("");setKeyFocus([project.story.challenge,project.story.response,project.whyItMatters].filter(populated).join(" "))},[projectId]);
   const create = async () => {
     if (!session || !project)
       return setError("Select one existing project.");
@@ -434,6 +440,7 @@ function ProjectSheetSetup({
             3,
             [source(project)],
           ),
+          section("key_focus","Key Focus",keyFocus.trim(),4,[source(project)]),
         ];
       const result = await apiRequest<{ package: StudioPackage }>(
         session,
@@ -451,6 +458,7 @@ function ProjectSheetSetup({
               projectId: project.id,
               primaryAssetId: primary,
               supportAssetIds: support,
+              imageCrop:{zoom:imageZoom,x:imageX,y:imageY},
             },
             sections,
             projectIds: [project.id],
@@ -572,6 +580,8 @@ function ProjectSheetSetup({
           )}
         </Field>
       )}
+      {project&&<Field title="Image framing"><label className="label">Zoom<input type="range" min="1" max="2" step="0.01" value={imageZoom} onChange={event=>setImageZoom(Number(event.target.value))}/></label><label className="label">Horizontal position<input type="range" min="0" max="100" value={imageX} onChange={event=>setImageX(Number(event.target.value))}/></label><label className="label">Vertical position<input type="range" min="0" max="100" value={imageY} onChange={event=>setImageY(Number(event.target.value))}/></label><Button variant="ghost" onClick={()=>{setImageZoom(1);setImageX(50);setImageY(50)}}>Reset crop</Button></Field>}
+      {project&&<label className="label">Key Focus<textarea value={keyFocus} onChange={event=>setKeyFocus(event.target.value)} placeholder="Add the distinctive challenge, opportunity, innovation or strategic focus supported by approved project knowledge."/><small>Editable output based only on approved project content.</small></label>}
       <button
         className="sv2-primary"
         disabled={saving || !project}
@@ -608,13 +618,15 @@ function CollectionSetup({
         .filter(
           (project) => project && eligibleProject(project, "internal"),
         ) as Project[]) || [];
-  useEffect(()=>{if(!collection)return setIntroDraft("");setIntroDraft([collection.brief,...selected.map(project=>projectNarrative(project)||projectSummary(project)).filter(populated).slice(0,2)].filter(Boolean).join("\n\n"))},[collectionId]);
+  useEffect(()=>{setIntroDraft(collection?.approvedNarrative||"")},[collectionId]);
   const create = async () => {
     if (!session || !collection) return setError("Select a collection.");
     if (!collection.brief.trim())
       return setError(
         "Add a Collection Brief in Projects before creating a polished opening page.",
       );
+    if (!collection.approvedNarrative.trim())
+      return setError("Generate and approve the Collection Narrative in Projects before export.");
     if (!selected.length)
       return setError(
         "The collection needs at least one existing project.",
@@ -925,6 +937,8 @@ function CvSetup({
     [projectIds, setProjectIds] = useState<string[]>([]),
     [brief, setBrief] = useState(""),
     [matched, setMatched] = useState(false),
+    [teamCounts,setTeamCounts]=useState<Record<string,number>>({"Team Lead":1,"Senior":0,"Junior":0,"Support / Management":0}),
+    [slotSelections,setSlotSelections]=useState<Record<string,string[]>>({}),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
   const briefTerms = [...new Set(brief.toLowerCase().split(/\W+/).filter((word) => word.length > 3))];
@@ -990,6 +1004,7 @@ function CvSetup({
       .map((project) => project.id);
     setProjectIds(recommended);
   };
+  const selectSlot=(slot:string,index:number,personId:string)=>{const selections={...slotSelections,[slot]:[...(slotSelections[slot]||[])]};selections[slot][index]=personId;setSlotSelections(selections);const next=[...new Set(Object.values(selections).flat().filter(Boolean))];setPersonIds(next);setProjectIds(projects.filter(project=>assignments.some(item=>item.approvalStatus==='approved'&&item.projectId===project.id&&next.includes(item.personId))).sort((a,b)=>score(b)-score(a)).slice(0,8).map(project=>project.id))};
   const create = async () => {
     if (!session || !personIds.length)
       return setError("Select a person or proposed team.");
@@ -1090,15 +1105,17 @@ function CvSetup({
           setProjectIds([]);
         }}
       />
+      <Field title="Step 1 · Define team structure"><div className="sv2-team-counts">{Object.entries(teamCounts).map(([slot,count])=><label className="label" key={slot}>{slot}<input type="number" min="0" max="12" value={count} onChange={event=>{setTeamCounts(current=>({...current,[slot]:Number(event.target.value)}));setMatched(false)}}/></label>)}</div></Field>
       <label className="label">
-        CV / staffing brief
+        Step 2 · Staffing brief
         <textarea
           value={brief}
           onChange={(event) => {setBrief(event.target.value);setMatched(false);setPersonIds([]);setProjectIds([])}}
           placeholder="Describe the expertise, sectors, scale, services and seniority needed."
         />
       </label>
-      <button className="sv2-primary" disabled={!brief.trim()} onClick={()=>{setMatched(true);setError(brief.trim()?"":"Enter a CV / staffing brief.")}}>Match People</button>
+      <button className="sv2-primary" disabled={!brief.trim()||!Object.values(teamCounts).some(Boolean)} onClick={()=>{setMatched(true);setError(brief.trim()?"":"Enter a CV / staffing brief.")}}>Step 3 · Match People</button>
+      {matched&&<Field title="Step 4 · Select team">{Object.entries(teamCounts).flatMap(([slot,count])=>Array.from({length:count},(_,index)=><label className="label" key={`${slot}-${index}`}>{slot} {count>1?index+1:""}<select value={slotSelections[slot]?.[index]||""} onChange={event=>selectSlot(slot,index,event.target.value)}><option value="">Select ranked candidate</option>{personMatches.map(({person,covered,evidenceProjects})=><option key={person.id} value={person.id}>{person.name} · {person.position} · {covered.length} of {briefTerms.length} requirements · {evidenceProjects.length} precedents</option>)}</select></label>))}</Field>}
       {matched && <Field title="Ranked people">
         {personMatches.map(({person,evidenceProjects,covered}) => (
           <SelectRow
@@ -1134,8 +1151,8 @@ function CvSetup({
           ))}
         </Field>
       )}
-      <button className="sv2-primary" disabled={saving} onClick={create}>
-        {saving ? "Creating…" : "Create bespoke CV"}
+      <button className="sv2-primary" disabled={saving||!personIds.length} onClick={create}>
+        {saving ? "Creating…" : "Create CV Package"}
       </button>
     </Setup>
   );
@@ -1671,7 +1688,6 @@ function ProjectSheetPage({
         <p>{project.sector}</p>
         <h2>
           {project.projectName}
-          <i>+</i>
         </h2>
       </section>
       <section className="sv2-body">
@@ -1699,11 +1715,11 @@ function ProjectSheetPage({
     </article>
   );
 }
-function Visual({ primary, support }: { primary?: Asset; support: Asset[] }) {
+function Visual({ primary, support, crop }: { primary?: Asset; support: Asset[]; crop?:{zoom:number;x:number;y:number} }) {
   return (
     <div className="sv2-visual">
       {primary?.url ? (
-        <img src={primary.url} alt={primary.caption || primary.title} />
+        <img src={primary.url} alt={primary.caption || primary.title} style={crop?{objectFit:'contain',objectPosition:`${crop.x}% ${crop.y}%`,transform:`scale(${crop.zoom})`,background:'#e4e6e2'}:undefined}/>
       ) : (
         <div className="sv2-image-placeholder">
           Approved visual not selected
@@ -2126,13 +2142,15 @@ function ProjectSheetPageNew({
         .join("\n\n"),
     outcomes = outcomesText.split(/\n\s*\n/).filter(populated),
     compactFacts = facts.length < 4,
-    sparseOutcomes = outcomes.length < 3;
+    sparseOutcomes = outcomes.length < 3,
+    crop=(item.data.imageCrop as {zoom:number;x:number;y:number}|undefined),
+    keyFocus=item.sections.find(value=>value.sectionType==='key_focus')?.body||'';
   return (
     <article
       className={`sv2-page sv2-sheet ${variant} ${compactFacts ? "compact-facts" : ""} ${sparseOutcomes ? "sparse-outcomes" : ""} ${primary ? "" : "text-led"}`}
     >
       {primary ? (
-        <Visual primary={primary} support={support} />
+        <Visual primary={primary} support={support} crop={crop} />
       ) : (
         <section className="sv2-text-lead">
           <p className="eyebrow">{project.sector || "Project"}</p>
@@ -2143,7 +2161,6 @@ function ProjectSheetPageNew({
         {project.sector && <p>{project.sector}</p>}
         <h2>
           {project.projectName}
-          <i>+</i>
         </h2>
         {compactFacts && (
           <div className="sv2-meta-line">
@@ -2172,9 +2189,10 @@ function ProjectSheetPageNew({
           {summary && <p>{summary}</p>}
           {narrative && narrative !== summary && <p>{narrative}</p>}
         </div>
+        <div className="sv2-key-focus"><h3>Key Focus</h3>{keyFocus&&<p>{keyFocus}</p>}</div>
         {outcomes.length > 0 && (
           <div className="sv2-outcomes">
-            <h3>Outcomes + Relevance</h3>
+            <h3>Key Project Outcomes</h3>
             {outcomes.map((value) => (
               <p key={value}>{value}</p>
             ))}

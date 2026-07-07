@@ -950,6 +950,8 @@ async function bootstrap(user: User) {
       name: item.title,
       description: item.brief,
       brief: item.brief,
+      keywords: item.keywords || "",
+      approvedNarrative: item.approved_narrative || "",
       projectIds: (collectionProjects || [])
         .filter((link) => link.collection_id === item.id)
         .map((link) => link.project_id),
@@ -1240,11 +1242,13 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     if (!["owner", "editor"].includes(role))
       return fail(res, 403, "You do not have permission to create collections");
     const title = String(input.title || "").trim(),
-      brief = String(input.brief || "").trim();
+      brief = String(input.brief || "").trim(),
+      keywords = String(input.keywords || "").trim(),
+      approved_narrative = String(input.approvedNarrative || "").trim();
     if (!title) return fail(res, 400, "Collection title is required");
     const { data, error } = await admin
       .from("collections")
-      .insert({ workspace_id: workspace.id, title, brief, created_by: user.id })
+      .insert({ workspace_id: workspace.id, title, brief, keywords, approved_narrative, created_by: user.id })
       .select("*")
       .single();
     if (error) throw error;
@@ -1254,6 +1258,8 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         name: data.title,
         description: data.brief,
         brief: data.brief,
+        keywords: data.keywords || "",
+        approvedNarrative: data.approved_narrative || "",
         projectIds: [],
       },
     });
@@ -1273,28 +1279,28 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       .update({
         title: String(input.title || "").trim(),
         brief: String(input.brief || "").trim(),
+        keywords: String(input.keywords || "").trim(),
+        approved_narrative: String(input.approvedNarrative || "").trim(),
       })
       .eq("workspace_id", workspace.id)
       .eq("id", id);
     if (error) throw error;
-    await admin
-      .from("collection_projects")
-      .delete()
-      .eq("workspace_id", workspace.id)
-      .eq("collection_id", id);
+    const {data:existingLinks,error:existingLinkError}=await admin.from("collection_projects").select("project_id").eq("workspace_id",workspace.id).eq("collection_id",id);
+    if(existingLinkError)throw existingLinkError;
     if (projectIds.length) {
       const { error: linkError } = await admin
         .from("collection_projects")
-        .insert(
+        .upsert(
           projectIds.map((projectId, index) => ({
             workspace_id: workspace.id,
             collection_id: id,
             project_id: projectId,
             project_order: index,
-          })),
+          })),{onConflict:"collection_id,project_id"}
         );
       if (linkError) throw linkError;
     }
+    for(const link of existingLinks||[]){if(projectIds.includes(link.project_id))continue;const {error:removeError}=await admin.from("collection_projects").delete().eq("workspace_id",workspace.id).eq("collection_id",id).eq("project_id",link.project_id);if(removeError)throw removeError}
     return reply(res, 200, { saved: true });
   }
   if (req.method === "POST" && path === "/api/v1/role-assignments") {

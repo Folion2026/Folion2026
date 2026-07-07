@@ -3,6 +3,8 @@ create table public.collections (
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
   title text not null,
   brief text not null default '',
+  keywords text not null default '',
+  approved_narrative text not null default '',
   created_by uuid not null references auth.users(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
