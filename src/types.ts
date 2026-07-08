@@ -1,6 +1,7 @@
 export type Visibility='public'|'private'
 export type ProjectConfidentiality='internal-only'|'externally-shareable'|'publicly-publishable'
-export interface TeamMember{personId:string;name:string;projectRole:string;contribution?:string}
+export type PersonStatus='active'|'inactive'|'deleted'
+export interface TeamMember{personId:string;name:string;projectRole:string;seniority?:string;contribution?:string;sourceReference?:string;personStatus?:PersonStatus}
 export interface Story{brief:string;challenge:string;response:string;outcome:string;lessons:string}
 export interface ProjectReflection{successFactors:string;uniqueness:string;designChallenge:string;planningChallenge:string;innovation:string;lessonsLearned:string;reusableKnowledge:string}
 export type AssetType='hero'|'report'|'plan'|'section'|'diagram'|'render'|'photo'|'document'|'other'
@@ -40,7 +41,8 @@ export interface ProjectKnowledge{facts:KnowledgeFact[];teamInput:TeamInput;draf
 export interface Project{id:string;projectName:string;visibility:Visibility;confidentiality:ProjectConfidentiality;status:string;knowledgeStatus?:KnowledgeReleaseStatus;creationStep?:ProjectCreationStep;creationReviewedNarrativeIds?:string[];company:string;location:string;address?:string[];sector:string;projectType?:string[];proposal?:string;precincts?:string[];siteContext?:string[];placeStrategy?:string[];scope?:string;year:string;client:string;siteArea:string;gfa:string;height:string;identity?:ProjectIdentity;metrics?:ProjectMetrics;opportunity?:KnowledgeItem[];challenges?:KnowledgeItem[];designResponse?:KnowledgeItem[];outcome?:ProjectOutcome;whyItMatters?:string;lessonsLearned?:string[];placeFramework?:PlaceFramework;studioAssets?:StudioAssets;searchIntelligence?:SearchIntelligence;evidence?:Evidence[];knowledge?:ProjectKnowledge;approvedEvidence?:ApprovedEvidenceItem[];approvedNarratives?:ApprovedNarrativeSection[];services:string[];team:TeamMember[];story:Story;reflection?:ProjectReflection;assets:Asset[];tags:string[];coverImage:string}
 export interface Collection{id:string;name:string;description:string;brief:string;keywords:string;approvedNarrative:string;projectIds:string[]}
 export interface ProjectRoleAssignment{id:string;personId:string;projectId:string;roleTitle:string;contributionSummary:string;approvalStatus?:'not_approved'|'approved';approved:boolean;sourceReference?:string}
-export interface Person{id:string;name:string;position:string;office:string;email:string;bio:string;skills:string[]}
+export interface Person{id:string;name:string;position:string;office:string;email:string;bio:string;skills:string[];status:PersonStatus}
+export interface BrandKit{logoUrl?:string;logoStoragePath?:string;primaryColour:string;accentColour:string}
 export type StudioPackageType='single_project_sheet'|'project_collection'|'pitch'|'cv'|'tender'
 export type StudioPackageMode='internal'|'external'
 export type StudioPackageState='draft'|'ready_to_share'|'source_updated'|'archived'

@@ -24,7 +24,6 @@ import {
   Asset,
   Collection,
   Project,
-  ProjectRoleAssignment,
   StudioPackage,
   StudioPackageMode,
   StudioPackageType,
@@ -153,7 +152,7 @@ const sanctuaryFixture = {
 
 export default function StudioV2() {
   const { session } = useAuth(),
-    { projects, people, collections, roleAssignments } = useStore(),
+    { projects, people, collections, workspace } = useStore(),
     navigate = useNavigate(),
     [params, setParams] = useSearchParams();
   const [packages, setPackages] = useState<StudioPackage[]>([]),
@@ -210,7 +209,8 @@ export default function StudioV2() {
       <PackageWorkspace
         item={active}
         projects={projects}
-        people={people}
+        people={people.filter(person=>person.status==='active')}
+        workspace={workspace}
         onBack={close}
       />
     );
@@ -243,8 +243,7 @@ export default function StudioV2() {
     return (
       <CvSetup
         projects={projects}
-        people={people}
-        assignments={roleAssignments}
+        people={people.filter(person=>person.status==='active')}
         onBack={() => setFlow("home")}
         onCreated={created}
       />
@@ -253,7 +252,7 @@ export default function StudioV2() {
     return (
       <TenderSetupNew
         projects={projects}
-        people={people}
+        people={people.filter(person=>person.status==='active')}
         onBack={() => setFlow("home")}
         onCreated={created}
       />
@@ -908,7 +907,6 @@ function PitchSetup({
 function CvSetup({
   projects,
   people,
-  assignments,
   onBack,
   onCreated,
 }: {
@@ -920,11 +918,11 @@ function CvSetup({
     bio?: string;
     skills?: string[];
   }[];
-  assignments: ProjectRoleAssignment[];
   onBack: () => void;
   onCreated: (item: StudioPackage) => void;
 }) {
   const { session } = useAuth();
+  const assignments=projects.flatMap(project=>project.team.filter(member=>member.personStatus!=='deleted').map(member=>({personId:member.personId,projectId:project.id,roleTitle:member.projectRole,contributionSummary:member.contribution||'',approvalStatus:'approved' as const})));
   const [mode, setMode] = useState<StudioPackageMode>("internal"),
     [personIds, setPersonIds] = useState<string[]>([]),
     [projectIds, setProjectIds] = useState<string[]>([]),
@@ -1583,6 +1581,7 @@ function PackageWorkspace({
   item,
   projects,
   people,
+  workspace,
   onBack,
 }: {
   item: StudioPackage;
@@ -1594,6 +1593,7 @@ function PackageWorkspace({
     bio?: string;
     skills?: string[];
   }[];
+  workspace: ReturnType<typeof useStore>['workspace'];
   onBack: () => void;
 }) {
   const project = projects.find((value) => value.id === item.projectIds[0]);
@@ -1631,7 +1631,7 @@ function PackageWorkspace({
           )}
         </div>
       </header>
-      <main ref={pagesRef}>
+      <main ref={pagesRef} style={{'--studio-primary':workspace?.brandKit.primaryColour||'#18201D','--studio-accent':workspace?.brandKit.accentColour||'#D6FF5C','--studio-logo':workspace?.brandKit.logoUrl?`url(${workspace.brandKit.logoUrl})`:'none','--studio-brand-name':`"${(workspace?.name||'').replace(/"/g,'')}"`} as React.CSSProperties}>
         {item.packageType === "single_project_sheet" && project ? (
           <ProjectSheetPageNew item={item} project={project} />
         ) : item.packageType === "project_collection" ? (

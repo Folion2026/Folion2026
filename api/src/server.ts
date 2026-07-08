@@ -8,7 +8,7 @@ try {
 
 type Json = Record<string, unknown>;
 type Role = "owner" | "editor" | "viewer";
-type Workspace = { id: string; name: string; slug: string };
+type Workspace = { id: string; name: string; slug: string; brand_kit?: Json };
 type Membership = { workspace_id: string; role: Role; workspaces: Workspace };
 
 const port = 8787;
@@ -85,7 +85,7 @@ function slug(value: string) {
 async function memberships(userId: string) {
   const { data, error } = await admin
     .from("workspace_members")
-    .select("workspace_id,role,workspaces!inner(id,name,slug)")
+    .select("workspace_id,role,workspaces!inner(id,name,slug,brand_kit)")
     .eq("user_id", userId);
   if (error) throw error;
   return (data || []) as unknown as Membership[];
@@ -107,7 +107,7 @@ async function ensureWorkspace(
     return { workspace: existing[0].workspaces, role: existing[0].role };
   const { data: ownedWorkspace, error: ownedError } = await admin
     .from("workspaces")
-    .select("id,name,slug")
+    .select("id,name,slug,brand_kit")
     .eq("created_by", user.id)
     .order("created_at", { ascending: true })
     .limit(1)
@@ -121,14 +121,14 @@ async function ensureWorkspace(
     const created = await admin
       .from("workspaces")
       .insert({ name, slug: workspaceSlug, created_by: user.id })
-      .select("id,name,slug")
+      .select("id,name,slug,brand_kit")
       .single();
     workspace = created.data;
     error = created.error;
     if (error?.code === "23505") {
       const prior = await admin
         .from("workspaces")
-        .select("id,name,slug")
+        .select("id,name,slug,brand_kit")
         .eq("slug", workspaceSlug)
         .eq("created_by", user.id)
         .single();
@@ -396,10 +396,13 @@ async function saveProject(workspaceId: string, user: User, project: Json) {
           project_id: id,
           person_id: String(member.personId),
           project_role: String(member.projectRole || ""),
+          seniority: String(member.seniority || "").trim() || null,
           contribution:
             typeof member.contribution === "string" && member.contribution
               ? member.contribution
               : null,
+          source_reference: String(member.sourceReference || "").trim() || null,
+          person_name_snapshot: String(member.name || "").trim() || null,
         })),
       );
     if (teamError) throw teamError;
@@ -820,9 +823,7 @@ async function bootstrap(user: User) {
       approvedSourceError ||
       approvedNarrativeError
     );
-  const names = new Map(
-    (people || []).map((person) => [person.id, person.name]),
-  );
+  const peopleById = new Map((people || []).map((person) => [person.id, person]));
   const signedUrls = new Map<string, string>();
   for (const asset of assets || []) {
     if (!asset.storage_path) continue;
@@ -855,9 +856,12 @@ async function bootstrap(user: User) {
         .filter((item) => item.project_id === row.id)
         .map((item) => ({
           personId: item.person_id,
-          name: names.get(item.person_id) || "",
+          name: item.person_name_snapshot || peopleById.get(item.person_id)?.name || "Former team member",
           projectRole: item.project_role,
+          seniority: item.seniority || undefined,
           contribution: item.contribution || undefined,
+          sourceReference: item.source_reference || undefined,
+          personStatus: peopleById.get(item.person_id)?.employment_status || "deleted",
         })),
       approvedEvidence: (approvedItems || [])
         .filter((item) => item.project_id === row.id)
@@ -908,11 +912,7 @@ async function bootstrap(user: User) {
       })),
     };
   });
-  const [
-    { data: collections, error: collectionError },
-    { data: collectionProjects, error: collectionProjectError },
-    { data: roleAssignments, error: roleAssignmentError },
-  ] = await Promise.all([
+  const [{ data: collections, error: collectionError }, { data: collectionProjects, error: collectionProjectError }] = await Promise.all([
     admin
       .from("collections")
       .select("*")
@@ -923,16 +923,16 @@ async function bootstrap(user: User) {
       .select("*")
       .eq("workspace_id", workspace.id)
       .order("project_order"),
-    admin
-      .from("project_role_assignments")
-      .select("*")
-      .eq("workspace_id", workspace.id)
-      .order("updated_at", { ascending: false }),
   ]);
-  if (collectionError || collectionProjectError || roleAssignmentError)
-    throw collectionError || collectionProjectError || roleAssignmentError;
+  if (collectionError || collectionProjectError) throw collectionError || collectionProjectError;
+  const brand = (workspace.brand_kit || {}) as Json;
+  let logoUrl = "";
+  if (brand.logoStoragePath) {
+    const signed = await admin.storage.from("project-assets").createSignedUrl(String(brand.logoStoragePath), 3600);
+    logoUrl = signed.data?.signedUrl || "";
+  }
   return {
-    workspace,
+    workspace: {...workspace, brandKit:{logoStoragePath:String(brand.logoStoragePath||""),logoUrl,primaryColour:String(brand.primaryColour||"#18201D"),accentColour:String(brand.accentColour||"#D6FF5C")}},
     role,
     projects,
     people: (people || []).map((person) => ({
@@ -943,6 +943,7 @@ async function bootstrap(user: User) {
       email: person.email,
       bio: person.bio,
       skills: person.skills || [],
+      status: person.employment_status || "active",
       ...person.data,
     })),
     collections: (collections || []).map((item) => ({
@@ -955,15 +956,6 @@ async function bootstrap(user: User) {
       projectIds: (collectionProjects || [])
         .filter((link) => link.collection_id === item.id)
         .map((link) => link.project_id),
-    })),
-    roleAssignments: (roleAssignments || []).map((item) => ({
-      id: item.id,
-      personId: item.person_id,
-      projectId: item.project_id,
-      roleTitle: item.role_title,
-      contributionSummary: item.contribution_summary,
-      approvalStatus: item.approval_status,
-      sourceReference: item.source_reference || undefined,
     })),
   };
 }
@@ -1226,15 +1218,49 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         ? value.skills.map((item) => String(item).trim()).filter(Boolean)
         : [],
       data: {},
+      employment_status: "active",
     };
     const { data, error } = await admin
       .from("people")
       .insert(row)
-      .select("id,name,position,office,email,bio,skills")
+      .select("id,name,position,office,email,bio,skills,employment_status")
       .single();
     if (error) throw error;
     await audit(workspaceId, user.id, "person.created", "person", row.id, {});
-    return reply(res, 201, { person: data, workspace, role });
+    return reply(res, 201, { person: {...data,status:data.employment_status}, workspace, role });
+  }
+  const personMatch = path.match(/^\/api\/v1\/people\/([^/]+)$/);
+  if ((req.method === "PUT" || req.method === "DELETE") && personMatch) {
+    const input = req.method === "PUT" ? await body(req) : {};
+    const { workspace, role } = await ensureWorkspace(user);
+    if (!["owner", "editor"].includes(role)) return fail(res,403,"You do not have permission to manage people in this workspace");
+    const id=decodeURIComponent(personMatch[1]);
+    const value=(input.person||{}) as Json;
+    const status=req.method === "DELETE" ? "deleted" : (["active","inactive","deleted"].includes(String(value.status))?String(value.status):"active");
+    const patch:Json={employment_status:status,archived_at:status==='active'?null:new Date().toISOString()};
+    if(req.method==='PUT'){const name=String(value.name||'').trim();if(!name)return fail(res,400,'Person name is required');Object.assign(patch,{name,position:String(value.position||'').trim(),office:String(value.office||'').trim(),email:String(value.email||'').trim(),bio:String(value.bio||'').trim(),skills:Array.isArray(value.skills)?value.skills.map(String):[]})}
+    const {data,error}=await admin.from('people').update(patch).eq('workspace_id',workspace.id).eq('id',id).select('id,name,position,office,email,bio,skills,employment_status').single();
+    if(error)throw error;
+    await audit(workspace.id,user.id,status==='deleted'?'person.deleted':'person.updated','person',id,{status});
+    return reply(res,200,{person:{...data,status:data.employment_status}});
+  }
+  if (req.method === "POST" && path === "/api/v1/brand-kit/logo-upload-url") {
+    const input=await body(req),{workspace,role}=await ensureWorkspace(user);
+    if(!["owner","editor"].includes(role))return fail(res,403,"You do not have permission to edit the Brand Kit");
+    const filename=String(input.filename||'logo').replace(/[^a-zA-Z0-9._-]/g,'-');
+    const storagePath=`${workspace.id}/brand/${crypto.randomUUID()}-${filename}`;
+    const {data,error}=await admin.storage.from('project-assets').createSignedUploadUrl(storagePath);if(error)throw error;
+    return reply(res,201,{storagePath,token:data.token});
+  }
+  if (req.method === "PUT" && path === "/api/v1/brand-kit") {
+    const input=await body(req),{workspace,role}=await ensureWorkspace(user);
+    if(!["owner","editor"].includes(role))return fail(res,403,"You do not have permission to edit the Brand Kit");
+    const colour=/^#[0-9a-fA-F]{6}$/;const primaryColour=String(input.primaryColour||'');const accentColour=String(input.accentColour||'');
+    if(!colour.test(primaryColour)||!colour.test(accentColour))return fail(res,400,'Brand colours must be six-digit hex values');
+    const brandKit={logoStoragePath:String(input.logoStoragePath||''),primaryColour,accentColour};
+    const {error}=await admin.from('workspaces').update({brand_kit:brandKit}).eq('id',workspace.id);if(error)throw error;
+    await audit(workspace.id,user.id,'brand_kit.updated','workspace',workspace.id,{});
+    return reply(res,200,{brandKit});
   }
   if (req.method === "POST" && path === "/api/v1/collections") {
     const input = await body(req),
@@ -1308,6 +1334,8 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     return reply(res, 200, { saved: true });
   }
   if (req.method === "POST" && path === "/api/v1/role-assignments") {
+    return fail(res, 410, "Project roles are managed inside the Project record");
+    /* Legacy compatibility code retained until the old table is removed in a later migration.
     const input = await body(req),
       { workspace, role } = await ensureWorkspace(user);
     if (!["owner", "editor"].includes(role))
@@ -1379,7 +1407,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         approvalStatus: data.approval_status,
         sourceReference: data.source_reference || undefined,
       },
-    });
+    }); */
   }
   const projectMatch = path.match(/^\/api\/v1\/projects\/([^/]+)$/);
   if (req.method === "POST" && path === "/api/v1/projects") {

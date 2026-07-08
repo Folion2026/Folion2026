@@ -161,7 +161,7 @@ export function normalizeProject(value:unknown):Project|null{
  const lessonsLearned=strings(project.lessonsLearned);if(!lessonsLearned.length&&text(rawStory.lessons))lessonsLearned.push(text(rawStory.lessons))
  const story:Story={brief:text(rawStory.brief,identity.description||EMPTY_STORY.brief),challenge:text(rawStory.challenge,challenges.map(item=>item.description).join(' ')),response:text(rawStory.response,designResponse.map(item=>item.description).join(' ')),outcome:text(rawStory.outcome,outcome.summary),lessons:text(rawStory.lessons,lessonsLearned.join(' '))}
  const assets=(Array.isArray(project.assets)?project.assets:[]).map(normalizeAsset).filter((asset):asset is Asset=>Boolean(asset))
- const team=records(project.team).map((member,index)=>({personId:text(member.personId,`unknown-${index}`),name:text(member.name,'Unknown team member'),projectRole:text(member.projectRole),contribution:text(member.contribution)||undefined}))
+ const team=records(project.team).map((member,index)=>({personId:text(member.personId,`unknown-${index}`),name:text(member.name,'Unknown team member'),projectRole:text(member.projectRole),seniority:text(member.seniority)||undefined,contribution:text(member.contribution)||undefined,sourceReference:text(member.sourceReference)||undefined,personStatus:['active','inactive','deleted'].includes(text(member.personStatus))?text(member.personStatus) as 'active'|'inactive'|'deleted':undefined}))
  const tags=strings(project.tags)
  const place=project.placeFramework&&typeof project.placeFramework==='object'?project.placeFramework as Partial<PlaceFramework>:{}
  const studioAssets=normalizeStudioAssets(project.studioAssets);const normalizedEvidence=normalizeEvidence(project.evidence);const whyItMatters=text(project.whyItMatters)
