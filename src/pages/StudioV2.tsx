@@ -752,25 +752,29 @@ function PitchSetup({
   const [mode, setMode] = useState<StudioPackageMode>("internal"),
     [briefing, setBriefing] = useState(""),
     [projectIds, setProjectIds] = useState<string[]>([]),
+    [analysed,setAnalysed]=useState(false),
+    [analysing,setAnalysing]=useState(false),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
-  const eligible = projects.filter((project) => eligibleProject(project, mode));
+  const eligible = projects.filter((project) => eligibleProject(project, mode)&&(approvedDraftSections(project).length>0||(project.approvedEvidence?.length||0)>0)),
+    pitchThemes=[...new Set(briefing.toLowerCase().split(/\W+/).filter(word=>word.length>4))],
+    ranked=eligible.map(project=>{const corpus=[project.projectName,project.sector,project.client,project.location,...project.services,...project.tags,project.story.challenge,project.story.response,project.story.outcome,project.whyItMatters,projectNarrative(project)].join(" ").toLowerCase(),covered=pitchThemes.filter(theme=>corpus.includes(theme));return{project,covered,missing:pitchThemes.filter(theme=>!covered.includes(theme))}}).sort((a,b)=>b.covered.length-a.covered.length);
   const toggle = (id: string) =>
     setProjectIds((current) =>
       current.includes(id)
         ? current.filter((value) => value !== id)
         : [...current, id],
     );
+  const move=(id:string,direction:-1|1)=>setProjectIds(current=>{const index=current.indexOf(id),next=index+direction;if(index<0||next<0||next>=current.length)return current;const copy=[...current];[copy[index],copy[next]]=[copy[next],copy[index]];return copy});
+  const analyse=()=>{if(!briefing.trim())return setError("Enter a Pitch Briefing.");if(!eligible.length)return setError("No project evidence is available for matching.");setAnalysing(true);setError("");setTimeout(()=>{setAnalysing(false);if(!ranked[0]?.covered.length){setAnalysed(false);setError("No adequate project evidence matched this Pitch Briefing.");return}setAnalysed(true);setProjectIds([])},250)};
   const create = async () => {
     if (!session) return;
     if (!briefing.trim()) return setError("Enter a Pitch Briefing.");
-    if (!eligible.length)
-      return setError("Add at least one project before analysing a Pitch Briefing.");
+    if (!analysed || !projectIds.length)
+      return setError("Analyse the briefing and select at least one matched project.");
     setSaving(true);
     try {
-      const terms = briefing.toLowerCase().split(/\W+/).filter((word) => word.length > 3),
-        identifiedIds = projectIds.length ? projectIds : eligible.map((project)=>({id:project.id,score:terms.filter((word)=>[project.projectName,project.sector,...project.services,...project.tags,projectSummary(project),projectNarrative(project)].join(" ").toLowerCase().includes(word)).length})).sort((a,b)=>b.score-a.score).slice(0,3).map((value)=>value.id),
-        selected = identifiedIds
+      const selected = projectIds
           .map((id) => projects.find((project) => project.id === id))
           .filter(Boolean) as Project[],
         lead = selected[0],
@@ -783,7 +787,7 @@ function PitchSetup({
             title:
               briefing.trim().split(/[.!?]/)[0].slice(0, 90) ||
               "A proposition for place",
-            body: "A focused proposition grounded in approved project intelligence.",
+            body: [lead.story.response,lead.whyItMatters].filter(populated).join(" "),
             projectId: lead.id,
             assetId: imageAssets(lead)[0]?.id,
           },
@@ -838,7 +842,7 @@ function PitchSetup({
           {
             kind: "close",
             title: "A clear next move",
-            body: "Apply the strongest approved precedent to the opportunity, with the evidence and ambition held together as one story.",
+            body: selected.map(project=>project.story.outcome||project.whyItMatters).filter(populated).join(" "),
             projectId: lead.id,
             assetId: imageAssets(lead)[0]?.id,
           },
@@ -860,7 +864,7 @@ function PitchSetup({
             state: "draft",
             data: { template: "studio-v2-pitch", briefing, slides },
             sections,
-            projectIds: identifiedIds,
+            projectIds,
             personIds: [],
             assetIds: slides.map((slide) => slide.assetId).filter(Boolean),
           }),
@@ -884,31 +888,20 @@ function PitchSetup({
         onChange={(value) => {
           setMode(value);
           setProjectIds([]);
+          setAnalysed(false);
         }}
       />
       <label className="label">
         Pitch Briefing
         <textarea
           value={briefing}
-          onChange={(event) => setBriefing(event.target.value)}
+          onChange={(event) => {setBriefing(event.target.value);setAnalysed(false);setProjectIds([])}}
           placeholder="Describe what is being pitched, the opportunity, tension and desired narrative."
         />
       </label>
-      <Field title="Optional evidence override">
-        {eligible.map((project) => (
-          <SelectRow
-            key={project.id}
-            checked={projectIds.includes(project.id)}
-            type="checkbox"
-            title={project.projectName}
-            detail={`${project.sector} · ${project.location}`}
-            onChange={() => toggle(project.id)}
-          />
-        ))}
-      </Field>
-      <button className="sv2-primary" disabled={saving} onClick={create}>
-        {saving ? "Analysing…" : "Analyse Pitch"}
-      </button>
+      <button className="sv2-primary" disabled={analysing||!briefing.trim()} onClick={analyse}>{analysing?"Analysing…":"Analyse Pitch"}</button>
+      {analysed&&<Field title={`Ranked project matches · ${projectIds.length} selected`}><div className="sv2-pitch-matches">{ranked.map(({project,covered,missing},index)=>{const image=imageAssets(project)[0];return <article key={project.id} className={projectIds.includes(project.id)?"selected":""}>{image&&<img src={image.url} alt=""/>}<div><span>#{index+1}</span><h3>{project.projectName}</h3><p>{[project.year,project.client,project.location].filter(populated).join(" · ")}</p><strong>{covered.length} of {pitchThemes.length} pitch themes evidenced</strong><p>Why it matches: {[project.sector,...project.services,project.story.response].filter(populated).slice(0,4).join(" · ")}</p>{missing.length>0&&<small>Weak or missing evidence: {missing.slice(0,5).join(", ")}</small>}</div><button type="button" onClick={()=>toggle(project.id)}>{projectIds.includes(project.id)?"Selected":"Select"}</button></article>})}</div>{projectIds.length>1&&<div className="sv2-order">{projectIds.map((id,index)=><div key={id}><span>{index+1}. {projects.find(project=>project.id===id)?.projectName}</span><button disabled={index===0} onClick={()=>move(id,-1)}>↑</button><button disabled={index===projectIds.length-1} onClick={()=>move(id,1)}>↓</button></div>)}</div>}</Field>}
+      {analysed&&<button className="sv2-primary" disabled={saving||!projectIds.length} onClick={create}>{saving?"Creating…":"Create Pitch"}</button>}
     </Setup>
   );
 }

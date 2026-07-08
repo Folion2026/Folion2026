@@ -1245,13 +1245,15 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       brief = String(input.brief || "").trim(),
       keywords = String(input.keywords || "").trim(),
       approved_narrative = String(input.approvedNarrative || "").trim();
-    if (!title) return fail(res, 400, "Collection title is required");
+    const projectIds=Array.isArray(input.projectIds)?input.projectIds.map(String):[];
+    if (!title || !brief) return fail(res, 400, "Collection title and brief are required");
     const { data, error } = await admin
       .from("collections")
       .insert({ workspace_id: workspace.id, title, brief, keywords, approved_narrative, created_by: user.id })
       .select("*")
       .single();
     if (error) throw error;
+    if(projectIds.length){const {error:linkError}=await admin.from("collection_projects").insert(projectIds.map((projectId,index)=>({workspace_id:workspace.id,collection_id:data.id,project_id:projectId,project_order:index})));if(linkError)throw linkError}
     return reply(res, 201, {
       collection: {
         id: data.id,
@@ -1260,7 +1262,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         brief: data.brief,
         keywords: data.keywords || "",
         approvedNarrative: data.approved_narrative || "",
-        projectIds: [],
+        projectIds,
       },
     });
   }
@@ -1274,11 +1276,13 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       projectIds = Array.isArray(input.projectIds)
         ? input.projectIds.map(String)
         : [];
+    const title=String(input.title||"").trim(),brief=String(input.brief||"").trim();
+    if(!title||!brief)return fail(res,400,"Collection title and brief are required");
     const { error } = await admin
       .from("collections")
       .update({
-        title: String(input.title || "").trim(),
-        brief: String(input.brief || "").trim(),
+        title,
+        brief,
         keywords: String(input.keywords || "").trim(),
         approved_narrative: String(input.approvedNarrative || "").trim(),
       })
