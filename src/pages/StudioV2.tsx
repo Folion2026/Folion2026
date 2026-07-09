@@ -1631,17 +1631,17 @@ function PackageWorkspace({
           )}
         </div>
       </header>
-      <main ref={pagesRef} style={{'--studio-primary':workspace?.brandKit.primaryColour||'#18201D','--studio-accent':workspace?.brandKit.accentColour||'#D6FF5C','--studio-logo':workspace?.brandKit.logoUrl?`url(${workspace.brandKit.logoUrl})`:'none','--studio-brand-name':`"${(workspace?.name||'').replace(/"/g,'')}"`} as React.CSSProperties}>
+      <main ref={pagesRef} style={{'--studio-primary':workspace?.brandKit.primaryColour||'#18201D','--studio-accent':workspace?.brandKit.accentColour||'#D6FF5C','--studio-text':workspace?.brandKit.textColour||'#18201D','--studio-background':workspace?.brandKit.backgroundColour||'#FFFFFF','--studio-logo':workspace?.brandKit.logoUrl?`url(${workspace.brandKit.logoUrl})`:'none','--studio-brand-name':`"${(workspace?.firmProfile.firmName||workspace?.name||'').replace(/"/g,'')}"`} as React.CSSProperties}>
         {item.packageType === "single_project_sheet" && project ? (
-          <ProjectSheetPageNew item={item} project={project} />
+          <ProjectSheetPageNew item={item} project={project} workspace={workspace} />
         ) : item.packageType === "project_collection" ? (
-          <CollectionPages item={item} projects={projects} />
+          <CollectionPages item={item} projects={projects} workspace={workspace} />
         ) : item.packageType === "pitch" ? (
           <PitchPages item={item} projects={projects} />
         ) : item.packageType === "cv" ? (
-          <CvPagesNew item={item} projects={projects} people={people} />
+          <CvPagesNew item={item} projects={projects} people={people} workspace={workspace} />
         ) : (
-          <TenderPagesNew item={item} projects={projects} people={people} />
+          <TenderPagesNew item={item} projects={projects} people={people} workspace={workspace} />
         )}
       </main>
     </div>
@@ -1734,16 +1734,21 @@ function AssetImage({ asset }: { asset: Asset }) {
 function CollectionPages({
   item,
   projects,
+  workspace,
 }: {
   item: StudioPackage;
   projects: Project[];
+  workspace: ReturnType<typeof useStore>['workspace'];
 }) {
   const ordered = item.projectIds
       .map((id) => projects.find((project) => project.id === id))
       .filter(Boolean) as Project[],
-    intro = item.sections.find(
+    intro = [
+      workspace?.firmProfile.firmStatement,
+      item.sections.find(
       (value) => value.sectionType === "capability_intro",
-    )?.body,
+      )?.body,
+    ].filter(populated).join("\n\n"),
     themes = ((item.data.themes as string[]) || [])
       .filter(populated)
       .slice(0, 3),
@@ -1785,13 +1790,14 @@ function CollectionPages({
         </div>
       </article>
       {ordered.map((project) => (
-        <ProjectSheetPageNew
+          <ProjectSheetPageNew
           key={project.id}
           item={{
             ...item,
             data: { ...item.data, primaryAssetId: imageAssets(project)[0]?.id },
           }}
           project={project}
+          workspace={workspace}
         />
       ))}
     </>
@@ -2094,9 +2100,11 @@ function PitchPages({
 function ProjectSheetPageNew({
   item,
   project,
+  workspace,
 }: {
   item: StudioPackage;
   project: Project;
+  workspace: ReturnType<typeof useStore>['workspace'];
 }) {
   const fixture = /sanctuary/i.test(project.projectName)
       ? sanctuaryFixture
@@ -2155,6 +2163,13 @@ function ProjectSheetPageNew({
         <h2>
           {project.projectName}
         </h2>
+        {workspace?.firmProfile.servicesProvided.length ? (
+          <div className="sv2-meta-line">
+            {workspace.firmProfile.servicesProvided.slice(0, 4).map((service) => (
+              <span key={service}>{service}</span>
+            ))}
+          </div>
+        ) : null}
         {compactFacts && (
           <div className="sv2-meta-line">
             {facts.map((fact) => (
@@ -2200,6 +2215,7 @@ function CvPagesNew({
   item,
   projects,
   people,
+  workspace,
 }: {
   item: StudioPackage;
   projects: Project[];
@@ -2210,6 +2226,7 @@ function CvPagesNew({
     bio?: string;
     skills?: string[];
   }[];
+  workspace: ReturnType<typeof useStore>['workspace'];
 }) {
   return (
     <>
@@ -2240,7 +2257,7 @@ function CvPagesNew({
                   <h2>{person.name}</h2>
                   <p>{person.position}</p>
                 </div>
-                <strong>FOLION</strong>
+                <strong>{workspace?.firmProfile.firmName||workspace?.name||''}</strong>
               </header>
               <section>
                 <aside>
@@ -2274,7 +2291,7 @@ function CvPagesNew({
                   <p>
                     {item.sections.find(
                       (value) => value.sectionType === "cv_profile",
-                    )?.body || person.bio}
+                    )?.body || [workspace?.firmProfile.firmStatement,person.bio].filter(populated).join("\n\n")}
                   </p>
                   {profile.careerHistory?.length ? (
                     <>
@@ -2596,10 +2613,12 @@ function TenderPagesNew({
   item,
   projects,
   people,
+  workspace,
 }: {
   item: StudioPackage;
   projects: Project[];
   people: { id: string; name: string; position: string }[];
+  workspace: ReturnType<typeof useStore>['workspace'];
 }) {
   const { session } = useAuth(),
     fixture = item.data.tenderFixture as typeof sampleTender | null,
@@ -2771,8 +2790,8 @@ function TenderPagesNew({
           {selectedPeople.map((person) => person.name).join(", ")}
         </footer>
       )}
-      {criteria.length>0&&<article className="sv2-page sv2-tender-output"><p className="eyebrow">Tender Response</p><h2>{String(analysis.tender_title||item.title)}</h2><section><h3>Requirement-to-evidence mapping</h3>{criteria.map(criterion=>{const project=match(criterion);return <div key={criterion}><strong>{criterion}</strong>{project?<p>{project.projectName} — {project.services.join(", ")||project.sector}</p>:<p className="sv2-gap-copy">Evidence gap — no approved project evidence selected.</p>}</div>})}</section><section><h3>Selected team</h3>{Object.entries(teamSlots).map(([slot,personId])=><div key={slot}><strong>{slot}</strong><p>{people.find(person=>person.id===personId)?.name||"Not selected — gap remains"}</p></div>)}</section></article>}
-      {criteria.length>0&&selected.map(project=><ProjectSheetPageNew key={project.id} item={{...item,data:{...item.data,primaryAssetId:imageAssets(project)[0]?.id}}} project={project}/>)}
+      {criteria.length>0&&<article className="sv2-page sv2-tender-output"><p className="eyebrow">Tender Response</p><h2>{String(analysis.tender_title||item.title)}</h2>{workspace?.firmProfile.firmStatement&&<section><h3>{workspace.firmProfile.firmName||workspace.name}</h3><p>{workspace.firmProfile.firmStatement}</p></section>}<section><h3>Requirement-to-evidence mapping</h3>{criteria.map(criterion=>{const project=match(criterion);return <div key={criterion}><strong>{criterion}</strong>{project?<p>{project.projectName} — {project.services.join(", ")||project.sector}</p>:<p className="sv2-gap-copy">Evidence gap — no approved project evidence selected.</p>}</div>})}</section><section><h3>Selected team</h3>{Object.entries(teamSlots).map(([slot,personId])=><div key={slot}><strong>{slot}</strong><p>{people.find(person=>person.id===personId)?.name||"Not selected — gap remains"}</p></div>)}</section></article>}
+      {criteria.length>0&&selected.map(project=><ProjectSheetPageNew key={project.id} item={{...item,data:{...item.data,primaryAssetId:imageAssets(project)[0]?.id}}} project={project} workspace={workspace}/>)}
     </div>
   );
 }

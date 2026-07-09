@@ -8,7 +8,7 @@ try {
 
 type Json = Record<string, unknown>;
 type Role = "owner" | "editor" | "viewer";
-type Workspace = { id: string; name: string; slug: string; brand_kit?: Json };
+type Workspace = { id: string; name: string; slug: string; brand_kit?: Json; firm_profile?: Json };
 type Membership = { workspace_id: string; role: Role; workspaces: Workspace };
 
 const port = 8787;
@@ -85,7 +85,7 @@ function slug(value: string) {
 async function memberships(userId: string) {
   const { data, error } = await admin
     .from("workspace_members")
-    .select("workspace_id,role,workspaces!inner(id,name,slug,brand_kit)")
+    .select("workspace_id,role,workspaces!inner(id,name,slug,brand_kit,firm_profile)")
     .eq("user_id", userId);
   if (error) throw error;
   return (data || []) as unknown as Membership[];
@@ -107,7 +107,7 @@ async function ensureWorkspace(
     return { workspace: existing[0].workspaces, role: existing[0].role };
   const { data: ownedWorkspace, error: ownedError } = await admin
     .from("workspaces")
-    .select("id,name,slug,brand_kit")
+    .select("id,name,slug,brand_kit,firm_profile")
     .eq("created_by", user.id)
     .order("created_at", { ascending: true })
     .limit(1)
@@ -121,14 +121,14 @@ async function ensureWorkspace(
     const created = await admin
       .from("workspaces")
       .insert({ name, slug: workspaceSlug, created_by: user.id })
-      .select("id,name,slug,brand_kit")
+      .select("id,name,slug,brand_kit,firm_profile")
       .single();
     workspace = created.data;
     error = created.error;
     if (error?.code === "23505") {
       const prior = await admin
         .from("workspaces")
-        .select("id,name,slug,brand_kit")
+        .select("id,name,slug,brand_kit,firm_profile")
         .eq("slug", workspaceSlug)
         .eq("created_by", user.id)
         .single();
@@ -764,6 +764,45 @@ async function savePackage(
   return packagePayload(workspaceId, packageId);
 }
 
+function normaliseFirmProfile(workspace: Workspace, input?: Json) {
+  const source = input || workspace.firm_profile || {};
+  const services = Array.isArray(source.servicesProvided)
+    ? source.servicesProvided.map(String)
+    : typeof source.servicesProvided === "string"
+      ? source.servicesProvided.split(/\n|,/)
+      : [];
+  return {
+    firmName: String(source.firmName || workspace.name || "Folion Workspace"),
+    firmStatement: String(source.firmStatement || ""),
+    servicesProvided: services.map((item) => item.trim()).filter(Boolean),
+    yearFounded: String(source.yearFounded || ""),
+    firmPhilosophy: String(source.firmPhilosophy || ""),
+  };
+}
+
+async function workspacePayload(workspace: Workspace) {
+  const brand = (workspace.brand_kit || {}) as Json;
+  let logoUrl = "";
+  if (brand.logoStoragePath) {
+    const signed = await admin.storage
+      .from("project-assets")
+      .createSignedUrl(String(brand.logoStoragePath), 3600);
+    logoUrl = signed.data?.signedUrl || "";
+  }
+  return {
+    ...workspace,
+    brandKit: {
+      logoStoragePath: String(brand.logoStoragePath || ""),
+      logoUrl,
+      primaryColour: String(brand.primaryColour || "#18201D"),
+      accentColour: String(brand.accentColour || "#D6FF5C"),
+      textColour: String(brand.textColour || "#18201D"),
+      backgroundColour: String(brand.backgroundColour || "#F4F3ED"),
+    },
+    firmProfile: normaliseFirmProfile(workspace),
+  };
+}
+
 async function bootstrap(user: User) {
   const { workspace, role } = await ensureWorkspace(user);
   const [
@@ -925,14 +964,8 @@ async function bootstrap(user: User) {
       .order("project_order"),
   ]);
   if (collectionError || collectionProjectError) throw collectionError || collectionProjectError;
-  const brand = (workspace.brand_kit || {}) as Json;
-  let logoUrl = "";
-  if (brand.logoStoragePath) {
-    const signed = await admin.storage.from("project-assets").createSignedUrl(String(brand.logoStoragePath), 3600);
-    logoUrl = signed.data?.signedUrl || "";
-  }
   return {
-    workspace: {...workspace, brandKit:{logoStoragePath:String(brand.logoStoragePath||""),logoUrl,primaryColour:String(brand.primaryColour||"#18201D"),accentColour:String(brand.accentColour||"#D6FF5C")}},
+    workspace: await workspacePayload(workspace),
     role,
     projects,
     people: (people || []).map((person) => ({
@@ -1244,6 +1277,27 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     await audit(workspace.id,user.id,status==='deleted'?'person.deleted':'person.updated','person',id,{status});
     return reply(res,200,{person:{...data,status:data.employment_status}});
   }
+  if (req.method === "PUT" && path === "/api/v1/firm-profile") {
+    const input = await body(req),
+      { workspace, role } = await ensureWorkspace(user);
+    if (!["owner", "editor"].includes(role))
+      return fail(
+        res,
+        403,
+        "You do not have permission to edit Firm Details",
+      );
+    const profile = normaliseFirmProfile(workspace, input);
+    const firmName = profile.firmName.trim() || workspace.name;
+    const { data, error } = await admin
+      .from("workspaces")
+      .update({ name: firmName, firm_profile: profile })
+      .eq("id", workspace.id)
+      .select("id,name,slug,brand_kit,firm_profile")
+      .single();
+    if (error) throw error;
+    await audit(workspace.id, user.id, "firm_profile.updated", "workspace", workspace.id, {});
+    return reply(res, 200, { workspace: await workspacePayload(data as Workspace) });
+  }
   if (req.method === "POST" && path === "/api/v1/brand-kit/logo-upload-url") {
     const input=await body(req),{workspace,role}=await ensureWorkspace(user);
     if(!["owner","editor"].includes(role))return fail(res,403,"You do not have permission to edit the Brand Kit");
@@ -1255,9 +1309,9 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   if (req.method === "PUT" && path === "/api/v1/brand-kit") {
     const input=await body(req),{workspace,role}=await ensureWorkspace(user);
     if(!["owner","editor"].includes(role))return fail(res,403,"You do not have permission to edit the Brand Kit");
-    const colour=/^#[0-9a-fA-F]{6}$/;const primaryColour=String(input.primaryColour||'');const accentColour=String(input.accentColour||'');
-    if(!colour.test(primaryColour)||!colour.test(accentColour))return fail(res,400,'Brand colours must be six-digit hex values');
-    const brandKit={logoStoragePath:String(input.logoStoragePath||''),primaryColour,accentColour};
+    const colour=/^#[0-9a-fA-F]{6}$/;const primaryColour=String(input.primaryColour||'');const accentColour=String(input.accentColour||''),textColour=String(input.textColour||'#18201D'),backgroundColour=String(input.backgroundColour||'#F4F3ED');
+    if(!colour.test(primaryColour)||!colour.test(accentColour)||!colour.test(textColour)||!colour.test(backgroundColour))return fail(res,400,'Brand colours must be six-digit hex values');
+    const brandKit={logoStoragePath:String(input.logoStoragePath||''),primaryColour,accentColour,textColour,backgroundColour};
     const {error}=await admin.from('workspaces').update({brand_kit:brandKit}).eq('id',workspace.id);if(error)throw error;
     await audit(workspace.id,user.id,'brand_kit.updated','workspace',workspace.id,{});
     return reply(res,200,{brandKit});

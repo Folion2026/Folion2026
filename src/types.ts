@@ -42,7 +42,8 @@ export interface Project{id:string;projectName:string;visibility:Visibility;conf
 export interface Collection{id:string;name:string;description:string;brief:string;keywords:string;approvedNarrative:string;projectIds:string[]}
 export interface ProjectRoleAssignment{id:string;personId:string;projectId:string;roleTitle:string;contributionSummary:string;approvalStatus?:'not_approved'|'approved';approved:boolean;sourceReference?:string}
 export interface Person{id:string;name:string;position:string;office:string;email:string;bio:string;skills:string[];status:PersonStatus}
-export interface BrandKit{logoUrl?:string;logoStoragePath?:string;primaryColour:string;accentColour:string}
+export interface FirmProfile{firmName:string;firmStatement:string;servicesProvided:string[];yearFounded:string;firmPhilosophy:string}
+export interface BrandKit{logoUrl?:string;logoStoragePath?:string;primaryColour:string;accentColour:string;textColour?:string;backgroundColour?:string}
 export type StudioPackageType='single_project_sheet'|'project_collection'|'pitch'|'cv'|'tender'
 export type StudioPackageMode='internal'|'external'
 export type StudioPackageState='draft'|'ready_to_share'|'source_updated'|'archived'
