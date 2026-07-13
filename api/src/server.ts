@@ -1531,10 +1531,10 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       ...draft.filter(item=>item.approved).map(item=>item.value),
       ...approvedNarratives.map(item=>item.text),
     ];
-    const missing: string[] = [];
-    if (!projectTitle) missing.push("project title");
-    if (!narrativeValues.some(value=>String(value || "").trim())) missing.push("a narrative or description");
-    if (missing.length) return fail(res, 422, `Cannot mark this project Ready for Studio. Add ${missing.join(" and ")}.`);
+    if (!projectTitle)
+      return fail(res, 422, "Add a project title before marking Ready for Studio.");
+    if (!narrativeValues.some(value=>String(value || "").trim()))
+      return fail(res, 422, "Add a project description, challenge, opportunity, response, outcome, source-derived summary or Team Input before marking Ready for Studio.");
     const { error: updateError } = await admin
       .from("projects")
       .update({
