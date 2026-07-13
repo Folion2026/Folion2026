@@ -141,7 +141,7 @@ export function isKnowledgeReviewResolved(project:Project){
 }
 
 export function projectKnowledgeStatus(project:Project){
- return project.knowledgeStatus==='Ready for Studio'&&isKnowledgeReviewResolved(project)?'Ready for Studio' as const:'Review needed' as const
+ return project.knowledgeStatus==='Ready for Studio'?'Ready for Studio' as const:'Review needed' as const
 }
 
 const evidenceFieldKeys:Record<string,KnowledgeFactKey>={project_name:'projectName',name:'projectName',location:'location',address:'address',client:'client',practice:'practice',practice_name:'practice',sector:'sector',typology:'sector',project_type:'projectType',status:'status',project_status:'status',date:'year',dates:'year',year:'year',proposal:'proposal',precincts:'precincts',site_context:'siteContext',place_strategy:'placeStrategy',site_area:'siteArea',gfa:'gfa',dwellings:'dwellings',units:'dwellings',height:'height',levels:'height',fsr:'fsr',services:'services',scope:'scope',responsibilities:'scope'}

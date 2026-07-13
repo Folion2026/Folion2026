@@ -1312,9 +1312,9 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     const colour=/^#[0-9a-fA-F]{6}$/;const primaryColour=String(input.primaryColour||'');const accentColour=String(input.accentColour||''),textColour=String(input.textColour||'#18201D'),backgroundColour=String(input.backgroundColour||'#F4F3ED');
     if(!colour.test(primaryColour)||!colour.test(accentColour)||!colour.test(textColour)||!colour.test(backgroundColour))return fail(res,400,'Brand colours must be six-digit hex values');
     const brandKit={logoStoragePath:String(input.logoStoragePath||''),primaryColour,accentColour,textColour,backgroundColour};
-    const {error}=await admin.from('workspaces').update({brand_kit:brandKit}).eq('id',workspace.id);if(error)throw error;
+    const {data,error}=await admin.from('workspaces').update({brand_kit:brandKit}).eq('id',workspace.id).select('id,name,slug,brand_kit,firm_profile').single();if(error)throw error;
     await audit(workspace.id,user.id,'brand_kit.updated','workspace',workspace.id,{});
-    return reply(res,200,{brandKit});
+    return reply(res,200,{workspace:await workspacePayload(data as Workspace)});
   }
   if (req.method === "POST" && path === "/api/v1/collections") {
     const input = await body(req),
@@ -1347,6 +1347,23 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     });
   }
   const collectionMatch = path.match(/^\/api\/v1\/collections\/([^/]+)$/);
+  if (req.method === "DELETE" && collectionMatch) {
+    const { workspace, role } = await ensureWorkspace(user);
+    if (!["owner", "editor"].includes(role))
+      return fail(res, 403, "You do not have permission to delete collections");
+    const id = decodeURIComponent(collectionMatch[1]);
+    const { data, error } = await admin
+      .from("collections")
+      .delete()
+      .eq("workspace_id", workspace.id)
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return fail(res, 404, "Collection not found");
+    await audit(workspace.id, user.id, "collection.deleted", "collection", id, {});
+    return reply(res, 200, { deleted: true, collectionId: id });
+  }
   if (req.method === "PUT" && collectionMatch) {
     const input = await body(req),
       { workspace, role } = await ensureWorkspace(user);
@@ -1487,7 +1504,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     ]);
     const { data: stored, error: readError } = await admin
       .from("projects")
-      .select("knowledge_status,data")
+      .select("project_name,knowledge_status,data")
       .eq("workspace_id", workspace.id)
       .eq("id", projectId)
       .single();
@@ -1498,6 +1515,26 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       data.creationStep === "completed"
     )
       return reply(res, 200, { ready: true, alreadyReady: true, projectId });
+    const knowledge = data.knowledge && typeof data.knowledge === "object" ? data.knowledge as Json : {};
+    const story = data.story && typeof data.story === "object" ? data.story as Json : {};
+    const identity = data.identity && typeof data.identity === "object" ? data.identity as Json : {};
+    const studioAssets = data.studioAssets && typeof data.studioAssets === "object" ? data.studioAssets as Json : {};
+    const teamInput = knowledge.teamInput && typeof knowledge.teamInput === "object" ? knowledge.teamInput as Json : {};
+    const draft = Array.isArray(knowledge.draft) ? knowledge.draft as Json[] : [];
+    const approvedNarratives = Array.isArray(data.approvedNarratives) ? data.approvedNarratives as Json[] : [];
+    const projectTitle = String(stored.project_name || data.projectName || "").trim();
+    const storyBrief = String(story.brief || "").trim();
+    const narrativeValues = [
+      storyBrief && storyBrief !== projectTitle ? storyBrief : "", story.challenge, story.response, story.outcome, story.lessons,
+      identity.description, studioAssets.shortSummary, data.whyItMatters,
+      teamInput.challengeOpportunity, teamInput.teamResponse, teamInput.futureRelevance,
+      ...draft.filter(item=>item.approved).map(item=>item.value),
+      ...approvedNarratives.map(item=>item.text),
+    ];
+    const missing: string[] = [];
+    if (!projectTitle) missing.push("project title");
+    if (!narrativeValues.some(value=>String(value || "").trim())) missing.push("a narrative or description");
+    if (missing.length) return fail(res, 422, `Cannot mark this project Ready for Studio. Add ${missing.join(" and ")}.`);
     const { error: updateError } = await admin
       .from("projects")
       .update({
