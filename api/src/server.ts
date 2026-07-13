@@ -299,6 +299,32 @@ async function markDependentNarrativesStale(
   if (updateError) throw updateError;
 }
 
+async function currentReviewNeedsRefresh(workspaceId: string, projectId: string) {
+  const { data: jobs, error: jobError } = await admin
+    .from("ingestion_jobs")
+    .select("id,narrative_only,status,created_at")
+    .eq("workspace_id", workspaceId)
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false });
+  if (jobError) throw jobError;
+  const currentJob =
+    (jobs || []).find(
+      (job) => job.narrative_only && job.status === "ready_for_review",
+    ) || (jobs || []).find((job) => !job.narrative_only);
+  if (!currentJob) return false;
+  const { data: stale, error: staleError } = await admin
+    .from("narrative_sections")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("project_id", projectId)
+    .eq("extraction_job_id", currentJob.id)
+    .eq("needs_refresh", true)
+    .in("status", ["draft", "approved"])
+    .limit(1);
+  if (staleError) throw staleError;
+  return Boolean(stale?.length);
+}
+
 async function markProjectNarrativesStale(workspaceId: string, projectId: string) {
   const { error } = await admin
     .from("narrative_sections")
@@ -1573,6 +1599,8 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       return fail(res, 422, "Add a project title before marking Ready for Studio.");
     if (!narrativeValues.some(value=>String(value || "").trim()))
       return fail(res, 422, "Add a project description, challenge, opportunity, response, outcome, source-derived summary or Team Input before marking Ready for Studio.");
+    if (await currentReviewNeedsRefresh(workspace.id, projectId))
+      return fail(res, 409, "Project knowledge has changed since this review was generated. Use Refresh Review before marking Ready for Studio.");
     const { error: updateError } = await admin
       .from("projects")
       .update({
