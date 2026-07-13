@@ -20,6 +20,7 @@ import {
 import { supabase } from "../lib/supabase";
 import { useStore } from "../store";
 import {Button} from "../components/ui";
+import "../studio-sheet.css";
 import {
   Asset,
   Collection,
@@ -76,6 +77,145 @@ const projectNarrative = (project: Project) =>
   approvedDraftSections(project).find(
     (item) => item.label === "Project narrative",
   )?.value || project.story.response;
+const cleanIntelligenceText = (value: unknown) =>
+  typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+const finishSentence = (value: unknown) => {
+  const text = cleanIntelligenceText(value);
+  return text && !/[.!?]$/.test(text) ? `${text}.` : text;
+};
+const uniqueIntelligence = (values: unknown[]) => {
+  const seen = new Set<string>();
+  return values.map(finishSentence).filter((value) => {
+    const key = value.toLowerCase();
+    if (!value || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+const approvedNarrative = (project: Project, types: string[]) =>
+  (project.approvedNarratives || [])
+    .filter((item) => types.includes(item.sectionType))
+    .map((item) => item.text)
+    .filter((value) => cleanIntelligenceText(value));
+const approvedDraft = (project: Project, key: string) =>
+  (project.knowledge?.draft || [])
+    .filter((item) => item.approved && item.key === key)
+    .map((item) => item.value)
+    .filter((value) => cleanIntelligenceText(value));
+const approvedRecordValue = (
+  project: Project,
+  approved: unknown[],
+  readyFallback: unknown[],
+) => {
+  const selected = approved.filter((value) => cleanIntelligenceText(value));
+  return selected.length
+    ? selected
+    : project.knowledgeStatus === "Ready for Studio"
+      ? readyFallback.filter((value) => cleanIntelligenceText(value))
+      : [];
+};
+const trimAtSentence = (text: string, maximumWords: number) => {
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length <= maximumWords) return text;
+  const shortened = words.slice(0, maximumWords).join(" ");
+  const boundary = Math.max(
+    shortened.lastIndexOf(". "),
+    shortened.lastIndexOf("! "),
+    shortened.lastIndexOf("? "),
+  );
+  return boundary > shortened.length * 0.6
+    ? shortened.slice(0, boundary + 1)
+    : `${shortened.replace(/[,:;.!?]+$/, "")}…`;
+};
+const generateProjectDescription = (project: Project) => {
+  const facts = new Map(
+      reviewedKnowledgeFacts(project).map((fact) => [fact.key, fact.value]),
+    ),
+    context = [
+      facts.get("client") ? `for ${facts.get("client")}` : "",
+      facts.get("location") ? `in ${facts.get("location")}` : "",
+      facts.get("year") ? `in ${facts.get("year")}` : "",
+    ].filter(Boolean),
+    opening = context.length
+      ? `${project.projectName} was undertaken ${context.join(" ")}.`
+      : `${project.projectName} is presented from the project's approved record.`,
+    summary = approvedRecordValue(
+      project,
+      [...approvedNarrative(project, ["project_summary"]), ...approvedDraft(project, "summary")],
+      [],
+    ),
+    challenge = approvedRecordValue(
+      project,
+      [...approvedNarrative(project, ["challenge_opportunity"]), ...approvedDraft(project, "challenge")],
+      [
+        ...(project.challenges || []).map((item) => item.description),
+        ...(project.opportunity || []).map((item) => item.description),
+        project.story.challenge,
+        project.knowledge?.teamInput.challengeOpportunity,
+      ],
+    ),
+    response = approvedRecordValue(
+      project,
+      [...approvedNarrative(project, ["response", "distinctive_response"]), ...approvedDraft(project, "response")],
+      [
+        ...(project.designResponse || []).map((item) => item.description),
+        project.story.response,
+        project.knowledge?.teamInput.teamResponse,
+      ],
+    ),
+    outcome = approvedRecordValue(
+      project,
+      [
+        ...approvedNarrative(project, ["outcome_future_relevance", "future_relevance", "precedent_relevance", "project_narrative"]),
+        ...approvedDraft(project, "outcome"),
+      ],
+      [
+        project.outcome?.summary,
+        ...(project.outcome?.benefits || []),
+        project.story.outcome,
+        project.whyItMatters,
+        project.knowledge?.teamInput.futureRelevance,
+      ],
+    ),
+    role = facts.get("scope") || project.identity?.role?.join(", "),
+    contribution = [
+      role ? `The recorded company role was ${role}.` : "",
+      facts.get("services") ? `Approved services included ${facts.get("services")}.` : "",
+    ];
+  return trimAtSentence(
+    uniqueIntelligence([opening, ...summary, ...challenge, ...response, ...contribution, ...outcome]).join(" "),
+    220,
+  );
+};
+const generateKeyFocus = (project: Project) => {
+  const challenge = approvedRecordValue(
+      project,
+      [...approvedNarrative(project, ["challenge_opportunity"]), ...approvedDraft(project, "challenge")],
+      [project.story.challenge, project.knowledge?.teamInput.challengeOpportunity],
+    )[0],
+    response = approvedRecordValue(
+      project,
+      [...approvedNarrative(project, ["distinctive_response", "response"]), ...approvedDraft(project, "response")],
+      [project.story.response, project.knowledge?.teamInput.teamResponse],
+    )[0],
+    outcome = approvedRecordValue(
+      project,
+      [...approvedNarrative(project, ["outcome_future_relevance", "future_relevance", "precedent_strength"]), ...approvedDraft(project, "outcome")],
+      [project.story.outcome, project.whyItMatters, project.story.lessons],
+    )[0],
+    role = reviewedKnowledgeFacts(project).find(
+      (fact) => fact.key === "scope" || fact.key === "practice",
+    )?.value || project.identity?.role?.join(", ");
+  return uniqueIntelligence([
+    challenge,
+    response,
+    role ? `The approved record defines the company's contribution as ${role}.` : "",
+    outcome,
+  ]).slice(0, 5).join(" ");
+};
+const wordCount = (value: string) => value.trim().split(/\s+/).filter(Boolean).length;
+const sentenceCount = (value: string) =>
+  (value.match(/[.!?](?:\s|$)/g) || []).length || (value.trim() ? 1 : 0);
 const eligibleProject = (project: Project, mode: StudioPackageMode) =>
   project.status !== "Archived" &&
   (mode === "internal" || project.confidentiality !== "internal-only");
@@ -141,15 +281,6 @@ const populated = (value: unknown) =>
   typeof value === "string" &&
   Boolean(value.trim()) &&
   !missingValue.test(value.trim());
-const sanctuaryFixture = {
-  client: "Sekisui House",
-  location: "Wentworth Point, NSW",
-  year: "2016–2019",
-  services:
-    "Urban Design; Independent Urban Design Review; Strategic Design Advisory",
-  referee: "Zac Petrovic, Development Manager, Sekisui House",
-};
-
 export default function StudioV2() {
   const { session } = useAuth(),
     { projects, people, collections, workspace } = useStore(),
@@ -218,6 +349,7 @@ export default function StudioV2() {
     return (
       <ProjectSheetSetup
         projects={projects}
+        workspace={workspace}
         onBack={() => setFlow("home")}
         onCreated={created}
       />
@@ -358,10 +490,12 @@ function Choice({
 
 function ProjectSheetSetup({
   projects,
+  workspace,
   onBack,
   onCreated,
 }: {
   projects: Project[];
+  workspace: ReturnType<typeof useStore>["workspace"];
   onBack: () => void;
   onCreated: (item: StudioPackage) => void;
 }) {
@@ -379,7 +513,9 @@ function ProjectSheetSetup({
     [imageZoom,setImageZoom]=useState(1),
     [imageX,setImageX]=useState(50),
     [imageY,setImageY]=useState(50),
+    [description,setDescription]=useState(""),
     [keyFocus,setKeyFocus]=useState(""),
+    [manualEditing,setManualEditing]=useState(false),
     [primary, setPrimary] = useState(""),
     [support, setSupport] = useState<string[]>([]),
     [saving, setSaving] = useState(false),
@@ -401,33 +537,76 @@ function ProjectSheetSetup({
   useEffect(() => {
     if (project && !primary) setPrimary(assets[0]?.id || "");
   }, [project, assets, primary]);
-  useEffect(()=>{if(!project)return setKeyFocus("");setKeyFocus([project.story.challenge,project.story.response,project.whyItMatters].filter(populated).join(" "))},[projectId]);
+  useEffect(() => {
+    setDescription("");
+    setKeyFocus("");
+    setManualEditing(false);
+    setImageZoom(1);
+    setImageX(50);
+    setImageY(50);
+  }, [projectId]);
+  const generateAll = () => {
+      if (!project) return;
+      setDescription(generateProjectDescription(project));
+      setKeyFocus(generateKeyFocus(project));
+      setManualEditing(true);
+      setError("");
+    },
+    descriptionWords = wordCount(description),
+    focusSentences = sentenceCount(keyFocus),
+    contentTooLong = descriptionWords > 220 || focusSentences > 5,
+    previewSections = project
+      ? [
+          section("project_description", "Project Description", description, 0, [source(project)]),
+          section("key_focus", "Key Focus", keyFocus, 1, [source(project)]),
+        ]
+      : [],
+    previewPackage: StudioPackage | null = project
+      ? {
+          id: "project-sheet-preview",
+          packageType: "single_project_sheet",
+          title: project.projectName,
+          mode,
+          state: "draft",
+          data: {
+            template: "studio-v2-project-sheet",
+            variant,
+            projectId: project.id,
+            primaryAssetId: primary,
+            supportAssetIds: support,
+            imageCrop: { zoom: imageZoom, x: imageX, y: imageY },
+          },
+          sections: previewSections,
+          projectIds: [project.id],
+          personIds: [],
+          assetIds: [primary, ...support].filter(Boolean),
+          createdAt: "",
+          updatedAt: "",
+        }
+      : null;
   const create = async () => {
     if (!session || !project)
       return setError("Select one existing project.");
+    if (!description.trim() || !keyFocus.trim())
+      return setError("Generate or enter both Project Description and Key Focus before saving.");
+    if (contentTooLong)
+      return setError("Trim the highlighted Project Sheet text before saving. The export is limited to one A4 page.");
     setSaving(true);
     try {
       const facts = reviewedKnowledgeFacts(project),
         sections = [
           section(
-            "project_summary",
-            "Project description",
-            projectSummary(project),
+            "project_description",
+            "Project Description",
+            description.trim(),
             0,
-            [source(project, "approved_project_summary")],
-          ),
-          section(
-            "project_narrative",
-            "Project narrative",
-            projectNarrative(project),
-            1,
-            [source(project, "approved_project_narrative")],
+            [source(project, "approved_project_intelligence")],
           ),
           section(
             "project_facts",
             "Project facts",
             facts.map((item) => `${item.label}: ${item.value}`).join("\n"),
-            2,
+            1,
             facts.map(() => source(project, "approved_project_fact")),
           ),
           section(
@@ -436,11 +615,11 @@ function ProjectSheetSetup({
             [project.story.outcome, project.whyItMatters]
               .filter(Boolean)
               .join("\n\n"),
-            3,
+            2,
             [source(project)],
           ),
-          section("key_focus","Key Focus",keyFocus.trim(),4,[source(project)]),
-        ];
+          section("key_focus","Key Focus",keyFocus.trim(),3,[source(project, "approved_project_intelligence")]),
+        ].map((item) => ({ ...item, status: "approved" as const }));
       const result = await apiRequest<{ package: StudioPackage }>(
         session,
         "/v1/packages",
@@ -450,7 +629,7 @@ function ProjectSheetSetup({
             packageType: "single_project_sheet",
             title: project.projectName,
             mode,
-            state: "draft",
+            state: "ready_to_share",
             data: {
               template: "studio-v2-project-sheet",
               variant,
@@ -458,6 +637,7 @@ function ProjectSheetSetup({
               primaryAssetId: primary,
               supportAssetIds: support,
               imageCrop:{zoom:imageZoom,x:imageX,y:imageY},
+              projectSheetTextApproved:true,
             },
             sections,
             projectIds: [project.id],
@@ -579,14 +759,84 @@ function ProjectSheetSetup({
           )}
         </Field>
       )}
-      {project&&<Field title="Image framing"><label className="label">Zoom<input type="range" min="1" max="2" step="0.01" value={imageZoom} onChange={event=>setImageZoom(Number(event.target.value))}/></label><label className="label">Horizontal position<input type="range" min="0" max="100" value={imageX} onChange={event=>setImageX(Number(event.target.value))}/></label><label className="label">Vertical position<input type="range" min="0" max="100" value={imageY} onChange={event=>setImageY(Number(event.target.value))}/></label><Button variant="ghost" onClick={()=>{setImageZoom(1);setImageX(50);setImageY(50)}}>Reset crop</Button></Field>}
-      {project&&<label className="label">Key Focus<textarea value={keyFocus} onChange={event=>setKeyFocus(event.target.value)} placeholder="Add the distinctive challenge, opportunity, innovation or strategic focus supported by approved project knowledge."/><small>Editable output based only on approved project content.</small></label>}
+      {project && (
+        <Field title="Project Sheet intelligence and preview">
+          <div className="sv2-intelligence-actions">
+            <Button onClick={generateAll}>Generate Project Sheet Narrative</Button>
+            <Button variant="ghost" onClick={() => setDescription(generateProjectDescription(project))}>
+              Regenerate Project Description
+            </Button>
+            <Button variant="ghost" onClick={() => setKeyFocus(generateKeyFocus(project))}>
+              Regenerate Key Focus
+            </Button>
+            <Button variant="ghost" onClick={() => setManualEditing(true)}>
+              Edit manually
+            </Button>
+          </div>
+          <div className="sv2-sheet-editor">
+            <div className="sv2-editor-controls">
+              <label className="label" htmlFor="project-sheet-description">
+                Project Description
+                <textarea
+                  id="project-sheet-description"
+                  value={description}
+                  readOnly={!manualEditing}
+                  onChange={(event) => setDescription(event.target.value)}
+                  placeholder="Generate an editable description from approved project intelligence."
+                />
+                <small className={descriptionWords > 220 ? "sv2-warning" : ""}>
+                  {descriptionWords} words · target 150–220. A shorter restrained draft is allowed when approved information is limited.
+                </small>
+              </label>
+              <label className="label" htmlFor="project-sheet-key-focus">
+                Key Focus
+                <textarea
+                  id="project-sheet-key-focus"
+                  value={keyFocus}
+                  readOnly={!manualEditing}
+                  onChange={(event) => setKeyFocus(event.target.value)}
+                  placeholder="Generate the distinctive challenge, contribution, approach and transferable insight."
+                />
+                <small className={focusSentences > 5 ? "sv2-warning" : ""}>
+                  {focusSentences} sentence{focusSentences === 1 ? "" : "s"} · maximum 5.
+                </small>
+              </label>
+              <div className="sv2-crop-controls">
+                <label className="label">Zoom<input type="range" min="1" max="2" step="0.01" value={imageZoom} onChange={event=>setImageZoom(Number(event.target.value))}/></label>
+                <label className="label">Horizontal position<input type="range" min="0" max="100" value={imageX} onChange={event=>setImageX(Number(event.target.value))}/></label>
+                <label className="label">Vertical position<input type="range" min="0" max="100" value={imageY} onChange={event=>setImageY(Number(event.target.value))}/></label>
+                <Button variant="ghost" onClick={()=>{setImageZoom(1);setImageX(50);setImageY(50)}}>Reset image crop</Button>
+              </div>
+              {contentTooLong && <p className="auth-message error">The sheet text is too long for a safe one-page export. Trim the highlighted field before saving.</p>}
+            </div>
+            {previewPackage && (
+              <div
+                className="sv2-sheet-preview"
+                aria-label="Actual A4 Project Sheet export preview"
+                style={{
+                  '--studio-primary':workspace?.brandKit.primaryColour||'#18201D',
+                  '--studio-accent':workspace?.brandKit.accentColour||'#D6FF5C',
+                  '--studio-text':workspace?.brandKit.textColour||'#18201D',
+                  '--studio-background':workspace?.brandKit.backgroundColour||'#FFFFFF',
+                  '--studio-logo':workspace?.brandKit.logoUrl?`url(${workspace.brandKit.logoUrl})`:'none',
+                  '--studio-brand-name':`"${(workspace?.firmProfile.firmName||workspace?.name||'').replace(/"/g,'')}"`,
+                } as React.CSSProperties}
+              >
+                <p>Actual A4 export framing</p>
+                <div className="sv2-sheet-preview-frame">
+                  <ProjectSheetPageNew item={previewPackage} project={project} workspace={workspace} />
+                </div>
+              </div>
+            )}
+          </div>
+        </Field>
+      )}
       <button
         className="sv2-primary"
-        disabled={saving || !project}
+        disabled={saving || !project || !description.trim() || !keyFocus.trim() || contentTooLong}
         onClick={create}
       >
-        {saving ? "Creating…" : "Create Project Sheet"}
+        {saving ? "Saving…" : "Save approved Project Sheet text"}
       </button>
     </Setup>
   );
@@ -1599,9 +1849,25 @@ function PackageWorkspace({
   const project = projects.find((value) => value.id === item.projectIds[0]);
   const pagesRef = useRef<HTMLElement>(null),
     [exporting, setExporting] = useState(false),
+    [exportError, setExportError] = useState(""),
     canExport = item.packageType !== "pitch";
   const download = async () => {
     if (!pagesRef.current) return;
+    const pages = [...pagesRef.current.querySelectorAll<HTMLElement>(".sv2-page")],
+      overflowing = pages.some(
+        (page) => page.scrollHeight > page.clientHeight + 2 || page.scrollWidth > page.clientWidth + 2,
+      ),
+      description = item.sections.find((value) => value.sectionType === "project_description")?.body || "",
+      keyFocus = item.sections.find((value) => value.sectionType === "key_focus")?.body || "";
+    if (
+      overflowing ||
+      (item.packageType === "single_project_sheet" &&
+        (pages.length !== 1 || wordCount(description) > 220 || sentenceCount(keyFocus) > 5))
+    ) {
+      setExportError("Export stopped: this Project Sheet exceeds the safe one-page layout. Trim the approved text and save again.");
+      return;
+    }
+    setExportError("");
     setExporting(true);
     try {
       await exportA4Pages(pagesRef.current, item.title);
@@ -1629,6 +1895,7 @@ function PackageWorkspace({
           ) : (
             <button disabled>Preview only — export coming next</button>
           )}
+          {exportError && <small className="sv2-warning">{exportError}</small>}
         </div>
       </header>
       <main ref={pagesRef} style={{'--studio-primary':workspace?.brandKit.primaryColour||'#18201D','--studio-accent':workspace?.brandKit.accentColour||'#D6FF5C','--studio-text':workspace?.brandKit.textColour||'#18201D','--studio-background':workspace?.brandKit.backgroundColour||'#FFFFFF','--studio-logo':workspace?.brandKit.logoUrl?`url(${workspace.brandKit.logoUrl})`:'none','--studio-brand-name':`"${(workspace?.firmProfile.firmName||workspace?.name||'').replace(/"/g,'')}"`} as React.CSSProperties}>
@@ -1712,7 +1979,7 @@ function Visual({ primary, support, crop }: { primary?: Asset; support: Asset[];
   return (
     <div className="sv2-visual">
       {primary?.url ? (
-        <img src={primary.url} alt={primary.caption || primary.title} style={crop?{objectFit:'contain',objectPosition:`${crop.x}% ${crop.y}%`,transform:`scale(${crop.zoom})`,background:'#e4e6e2'}:undefined}/>
+        <img src={primary.url} alt={primary.caption || primary.title} style={crop?{objectFit:'cover',objectPosition:`${crop.x}% ${crop.y}%`,transform:`scale(${crop.zoom})`,transformOrigin:`${crop.x}% ${crop.y}%`}:undefined}/>
       ) : (
         <div className="sv2-image-placeholder">
           Approved visual not selected
@@ -2106,10 +2373,7 @@ function ProjectSheetPageNew({
   project: Project;
   workspace: ReturnType<typeof useStore>['workspace'];
 }) {
-  const fixture = /sanctuary/i.test(project.projectName)
-      ? sanctuaryFixture
-      : null,
-    primary =
+  const primary =
       project.assets.find((asset) => asset.id === item.data.primaryAssetId) ||
       imageAssets(project)[0],
     support = ((item.data.supportAssetIds as string[]) || [])
@@ -2117,19 +2381,21 @@ function ProjectSheetPageNew({
       .filter(Boolean) as Asset[],
     variant = String(item.data.variant || "hero"),
     facts = [
-      { label: "Client", value: fixture?.client || project.client },
-      { label: "Location", value: fixture?.location || project.location },
-      { label: "Year", value: fixture?.year || project.year },
+      { label: "Client", value: project.client },
+      { label: "Location", value: project.location },
+      { label: "Year", value: project.year },
       {
         label: "Services",
-        value: fixture?.services || project.services.join("; "),
+        value: project.services.join("; "),
       },
-      { label: "Referee", value: fixture?.referee },
       { label: "Role", value: project.identity?.role?.join(", ") },
       { label: "Site area", value: project.siteArea },
       { label: "GFA", value: project.gfa },
       { label: "Height", value: project.height },
     ].filter((fact) => populated(fact.value)),
+    approvedDescription = item.sections.find(
+      (value) => value.sectionType === "project_description",
+    )?.body,
     summary =
       item.sections.find((value) => value.sectionType === "project_summary")
         ?.body || projectSummary(project),
@@ -2155,7 +2421,7 @@ function ProjectSheetPageNew({
       ) : (
         <section className="sv2-text-lead">
           <p className="eyebrow">{project.sector || "Project"}</p>
-          <p>{summary || narrative}</p>
+          <p>{approvedDescription || summary || narrative}</p>
         </section>
       )}
       <section className="sv2-title">
@@ -2194,8 +2460,14 @@ function ProjectSheetPageNew({
         )}
         <div className="sv2-description">
           <h3>Project Description</h3>
-          {summary && <p>{summary}</p>}
-          {narrative && narrative !== summary && <p>{narrative}</p>}
+          {approvedDescription ? (
+            <p>{approvedDescription}</p>
+          ) : (
+            <>
+              {summary && <p>{summary}</p>}
+              {narrative && narrative !== summary && <p>{narrative}</p>}
+            </>
+          )}
         </div>
         <div className="sv2-key-focus"><h3>Key Focus</h3>{keyFocus&&<p>{keyFocus}</p>}</div>
         {outcomes.length > 0 && (

@@ -1,0 +1,124 @@
+.sv2-page {
+  height: 1123px;
+  max-height: 1123px;
+}
+
+.sv2-sheet.plan .sv2-visual img:first-child {
+  object-fit: cover;
+  background: transparent;
+}
+
+.sv2-intelligence-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.sv2-sheet-editor {
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) 430px;
+  gap: 28px;
+  align-items: start;
+}
+
+.sv2-editor-controls {
+  display: grid;
+  gap: 18px;
+}
+
+.sv2-editor-controls textarea[readonly] {
+  background: #f3f4f2;
+  color: #56605b;
+}
+
+.sv2-crop-controls {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid #d7ddda;
+  padding-top: 18px;
+}
+
+.sv2-warning {
+  color: #9a4035 !important;
+  font-weight: 700;
+}
+
+.sv2-sheet-preview > p {
+  margin: 0 0 8px;
+  color: #65716b;
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.sv2-sheet-preview-frame {
+  width: 397px;
+  height: 562px;
+  overflow: hidden;
+  background: #ddd;
+  box-shadow: 0 8px 28px #1d2b2530;
+}
+
+.sv2-sheet-preview-frame > .sv2-page {
+  transform: scale(.5);
+  transform-origin: top left;
+  box-shadow: none;
+}
+
+.sv2-sheet-preview .sv2-page {
+  border-top: 4px solid var(--studio-accent, #d6ff5c);
+  background: var(--studio-background, #fff);
+  color: var(--studio-text, #18201d);
+}
+
+.sv2-sheet-preview .sv2-page::after {
+  content: var(--studio-brand-name, "");
+  position: absolute;
+  right: 26px;
+  bottom: 18px;
+  min-width: 88px;
+  min-height: 24px;
+  padding-right: 42px;
+  background-image: var(--studio-logo, none);
+  background-position: right center;
+  background-repeat: no-repeat;
+  background-size: 34px 24px;
+  color: var(--studio-primary, #18201d);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 24px;
+  text-align: right;
+}
+
+.sv2-sheet-preview .sv2-body aside {
+  border-color: var(--studio-accent, #d6ff5c);
+}
+
+.sv2-sheet-preview .sv2-title h2 {
+  color: var(--studio-primary, #18201d);
+}
+
+.sv2-workspace-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  max-width: 520px;
+}
+
+.sv2-workspace-actions .sv2-warning {
+  flex-basis: 100%;
+  text-align: right;
+}
+
+@media (max-width: 900px) {
+  .sv2-sheet-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .sv2-sheet-preview {
+    overflow: auto;
+  }
+}
