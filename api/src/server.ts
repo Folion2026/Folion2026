@@ -293,10 +293,42 @@ async function markDependentNarrativesStale(
     .from("narrative_sections")
     .update({
       needs_refresh: true,
-      stale_reason: "Supporting project knowledge changed.",
+      stale_reason: "Project knowledge has changed since this review was generated.",
     })
     .in("id", ids);
   if (updateError) throw updateError;
+}
+
+async function markProjectNarrativesStale(workspaceId: string, projectId: string) {
+  const { error } = await admin
+    .from("narrative_sections")
+    .update({
+      needs_refresh: true,
+      stale_reason: "Project knowledge has changed since this review was generated.",
+    })
+    .eq("workspace_id", workspaceId)
+    .eq("project_id", projectId)
+    .in("status", ["draft", "approved"]);
+  if (error) throw error;
+}
+
+function projectKnowledgeFingerprint(project: Json) {
+  const knowledge = (project.knowledge || {}) as Json;
+  return JSON.stringify({
+    projectName: project.projectName || "",
+    location: project.location || "",
+    sector: project.sector || "",
+    client: project.client || "",
+    status: project.status || "",
+    year: project.year || "",
+    services: project.services || [],
+    siteArea: project.siteArea || "",
+    gfa: project.gfa || "",
+    height: project.height || "",
+    scope: project.scope || "",
+    facts: knowledge.facts || [],
+    teamInput: knowledge.teamInput || {},
+  });
 }
 
 function assetRow(
@@ -346,7 +378,7 @@ async function saveProject(workspaceId: string, user: User, project: Json) {
   const { team: _team, assets: _assets, ...data } = project;
   const { data: existing } = await admin
     .from("projects")
-    .select("created_by,cover_image")
+    .select("created_by,cover_image,data")
     .eq("workspace_id", workspaceId)
     .eq("id", id)
     .maybeSingle();
@@ -381,6 +413,12 @@ async function saveProject(workspaceId: string, user: User, project: Json) {
     .from("projects")
     .upsert(row, { onConflict: "workspace_id,id" });
   if (error) throw error;
+  if (
+    existing?.data &&
+    projectKnowledgeFingerprint(existing.data as Json) !==
+      projectKnowledgeFingerprint(project)
+  )
+    await markProjectNarrativesStale(workspaceId, id);
   const { error: teamDeleteError } = await admin
     .from("project_team_members")
     .delete()
@@ -1705,6 +1743,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       .from("assets")
       .upsert(row, { onConflict: "workspace_id,project_id,id" });
     if (error) throw error;
+    await markProjectNarrativesStale(workspaceId, projectId);
     await audit(
       workspaceId,
       user.id,
@@ -2080,7 +2119,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       return fail(
         res,
         409,
-        "Needs refresh — supporting project knowledge changed.",
+        "Project knowledge has changed since this review was generated. Refresh the review before approving it.",
       );
     if (action === "approve" || action === "edit_approve") {
       const supporting = Array.isArray(section.supporting_item_ids)
@@ -2097,7 +2136,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
           return fail(
             res,
             409,
-            "Needs refresh — supporting project knowledge changed.",
+            "Project knowledge has changed since this review was generated. Refresh the review before approving it.",
           );
       }
     }
