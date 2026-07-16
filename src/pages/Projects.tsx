@@ -38,7 +38,7 @@ export default function Projects(){
   return <div>
     {notice&&<div className="auth-message mb-5" role="status">{notice}</div>}
     <header className="projects-header">
-      <div><p className="eyebrow">Project memory</p><h1 className="page-title mt-2">Find what the practice knows.</h1><p className="projects-intro">Search the facts, stories, services and lessons inside every project.</p></div>
+      <div><p className="eyebrow">Project Deck · Practice Intelligence</p><h1 className="page-title mt-2">Find what the practice knows.</h1><p className="projects-intro">An intelligent architectural archive of approved facts, stories, services, images and lessons.</p></div>
       <Link to="/new-project"><Button><Plus size={17}/> New project</Button></Link>
     </header>
 
@@ -52,7 +52,7 @@ export default function Projects(){
 
     {!isExploring&&<section className="workspace-section"><div className="workspace-heading"><div><p className="eyebrow">Curated portfolios</p><h2 className="section-title mt-2">Collections</h2><p>Reusable groups of projects for sectors, ideas and opportunities.</p></div><Button variant="ghost" onClick={()=>setCollectionModal(true)}><FolderPlus size={17}/> Create collection</Button></div><div className="grid md:grid-cols-2 xl:grid-cols-3 gap-5 mt-6">{collections.map(collection=><CollectionCard key={collection.id} collection={collection} projects={projects}/>)}</div></section>}
 
-    <section className="workspace-section"><div className="workspace-heading"><div><p className="eyebrow">{isExploring?'Ask Folion':'Workspace'}</p><h2 className="section-title mt-2">{isExploring?'Project matches':'All projects'}</h2><p>{isExploring?'Select a project, refine the search, or open its full memory.':'Select cards to curate, review confidentiality or archive work.'}</p></div><span className="project-count">{results.length} project{results.length!==1?'s':''}</span></div>{results.length?<div className="projects-grid">{results.map(project=><ProjectCard key={project.id} project={project}/>)}</div>:<EmptyState title="No project memory found" body="Try a broader phrase, another place, or a project service." action={<Button variant="ghost" onClick={resetSearch}>Reset search</Button>}/>}</section>
+    <section className="workspace-section"><div className="workspace-heading"><div><p className="eyebrow">{isExploring?'Ask Folion':'Project Deck'}</p><h2 className="section-title mt-2">{isExploring?'Project matches':'The practice archive'}</h2><p>{isExploring?'Select a project, refine the search, or open its full memory.':'Browse visually, then open the complete approved project record.'}</p></div><span className="project-count">{results.length} project{results.length!==1?'s':''}</span></div>{results.length?<div className="projects-grid">{results.map(project=><ProjectCard key={project.id} project={project}/>)}</div>:<EmptyState title="No project memory found" body="Try a broader phrase, another place, or a project service." action={<Button variant="ghost" onClick={resetSearch}>Reset search</Button>}/>}</section>
 
     <BottomSelectionBar/>
     <Modal open={collectionModal} onClose={()=>setCollectionModal(false)} title="Create Collection"><CollectionForm projects={projects} onSave={create} onCancel={()=>setCollectionModal(false)}/></Modal>
