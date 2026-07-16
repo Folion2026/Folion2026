@@ -15,6 +15,15 @@
   margin-bottom: 20px;
 }
 
+.sv2-intelligence-status {
+  margin: -8px 0 18px;
+  border-left: 3px solid var(--studio-accent, #d6ff5c);
+  padding: 10px 12px;
+  background: #eef2ed;
+  color: #46514b;
+  font-size: 12px;
+}
+
 .sv2-sheet-editor {
   display: grid;
   grid-template-columns: minmax(300px, 1fr) 430px;
@@ -37,6 +46,22 @@
   gap: 10px;
   border-top: 1px solid #d7ddda;
   padding-top: 18px;
+}
+
+.sv2-crop-controls .label {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.sv2-crop-controls output {
+  color: #65716b;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sv2-crop-controls input {
+  grid-column: 1 / -1;
 }
 
 .sv2-warning {

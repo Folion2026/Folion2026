@@ -516,6 +516,8 @@ function ProjectSheetSetup({
     [description,setDescription]=useState(""),
     [keyFocus,setKeyFocus]=useState(""),
     [manualEditing,setManualEditing]=useState(false),
+    [generationState,setGenerationState]=useState<"idle"|"all"|"description"|"focus">("idle"),
+    [generationError,setGenerationError]=useState(""),
     [primary, setPrimary] = useState(""),
     [support, setSupport] = useState<string[]>([]),
     [saving, setSaving] = useState(false),
@@ -541,16 +543,28 @@ function ProjectSheetSetup({
     setDescription("");
     setKeyFocus("");
     setManualEditing(false);
+    setGenerationState("idle");
+    setGenerationError("");
     setImageZoom(1);
     setImageX(50);
     setImageY(50);
   }, [projectId]);
-  const generateAll = () => {
+  const generateIntelligence = async (target:"all"|"description"|"focus") => {
       if (!project) return;
-      setDescription(generateProjectDescription(project));
-      setKeyFocus(generateKeyFocus(project));
-      setManualEditing(true);
+      setGenerationState(target);
+      setGenerationError("");
       setError("");
+      try {
+        await new Promise(resolve=>window.setTimeout(resolve,350));
+        if(target!=="focus")setDescription(generateProjectDescription(project));
+        if(target!=="description")setKeyFocus(generateKeyFocus(project));
+        setManualEditing(true);
+      } catch (reason) {
+        const message=reason instanceof Error?reason.message:"Folion Intelligence could not generate this content.";
+        setGenerationError(`${message} Please retry.`);
+      } finally {
+        setGenerationState("idle");
+      }
     },
     descriptionWords = wordCount(description),
     focusSentences = sentenceCount(keyFocus),
@@ -762,17 +776,19 @@ function ProjectSheetSetup({
       {project && (
         <Field title="Project Sheet intelligence and preview">
           <div className="sv2-intelligence-actions">
-            <Button onClick={generateAll}>Generate Project Sheet Narrative</Button>
-            <Button variant="ghost" onClick={() => setDescription(generateProjectDescription(project))}>
-              Regenerate Project Description
+            <Button disabled={generationState!=="idle"} onClick={()=>void generateIntelligence("all")}>{generationState==="all"?"Folion Intelligence is generating…":"Generate Project Sheet Narrative"}</Button>
+            <Button disabled={generationState!=="idle"} variant="ghost" onClick={() => void generateIntelligence("description")}>
+              {generationState==="description"?"Regenerating description…":"Regenerate Project Description"}
             </Button>
-            <Button variant="ghost" onClick={() => setKeyFocus(generateKeyFocus(project))}>
-              Regenerate Key Focus
+            <Button disabled={generationState!=="idle"} variant="ghost" onClick={() => void generateIntelligence("focus")}>
+              {generationState==="focus"?"Regenerating Key Focus…":"Regenerate Key Focus"}
             </Button>
             <Button variant="ghost" onClick={() => setManualEditing(true)}>
               Edit manually
             </Button>
           </div>
+          {generationState!=="idle"&&<p className="sv2-intelligence-status" role="status">Folion Intelligence is using approved project knowledge and source-supported review content.</p>}
+          {generationError&&<p className="auth-message error" role="alert">{generationError}</p>}
           <div className="sv2-sheet-editor">
             <div className="sv2-editor-controls">
               <label className="label" htmlFor="project-sheet-description">
@@ -802,9 +818,9 @@ function ProjectSheetSetup({
                 </small>
               </label>
               <div className="sv2-crop-controls">
-                <label className="label">Zoom<input type="range" min="1" max="2" step="0.01" value={imageZoom} onChange={event=>setImageZoom(Number(event.target.value))}/></label>
-                <label className="label">Horizontal position<input type="range" min="0" max="100" value={imageX} onChange={event=>setImageX(Number(event.target.value))}/></label>
-                <label className="label">Vertical position<input type="range" min="0" max="100" value={imageY} onChange={event=>setImageY(Number(event.target.value))}/></label>
+                <label className="label">Zoom <output>{imageZoom.toFixed(2)}×</output><input aria-label="Hero image zoom" type="range" min="1" max="4" step="0.01" value={imageZoom} onChange={event=>setImageZoom(Number(event.target.value))}/></label>
+                <label className="label">Horizontal position <output>{imageX}%</output><input aria-label="Hero image horizontal position" type="range" min="0" max="100" step="1" value={imageX} onChange={event=>setImageX(Number(event.target.value))}/></label>
+                <label className="label">Vertical position <output>{imageY}%</output><input aria-label="Hero image vertical position" type="range" min="0" max="100" step="1" value={imageY} onChange={event=>setImageY(Number(event.target.value))}/></label>
                 <Button variant="ghost" onClick={()=>{setImageZoom(1);setImageX(50);setImageY(50)}}>Reset image crop</Button>
               </div>
               {contentTooLong && <p className="auth-message error">The sheet text is too long for a safe one-page export. Trim the highlighted field before saving.</p>}
