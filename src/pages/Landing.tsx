@@ -13,7 +13,7 @@ export default function Landing(){return <div className="marketing-page">
   <PublicNav overlay/>
   <main>
     <section className="brand-hero">
-      <img src="/projects/stormbringer/cover.jpg" alt="Architectural project"/>
+      <img src="/brand/folion-hero-architecture.png" alt="Completed contemporary cultural building at dusk"/>
       <div className="brand-hero-shade"/><div className="folion-cropmark" aria-hidden="true">F</div>
       <div className="brand-hero-content"><p className="marketing-kicker">Practice Intelligence for Design Firms</p><h1>Build your firm's memory.</h1><p>Your best projects, people and experience already exist. Folion turns them into knowledge your practice can find, trust and use.</p><div className="marketing-actions"><Link className="marketing-primary" to="/product">See Folion in action <ArrowRight/></Link><Link className="marketing-secondary light" to="/how-it-works">Explore how it works</Link></div></div>
     </section>
