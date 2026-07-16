@@ -392,11 +392,11 @@ export default function StudioV2() {
   return (
     <div className="sv2">
       <header className="sv2-intro">
-        <p className="eyebrow">Studio V2</p>
-        <h1>What are you making?</h1>
+        <p className="eyebrow">Folion Studio · Production workspace</p>
+        <h1>Turn practice intelligence into finished work.</h1>
         <p>
-          Compose editorial packages from approved project knowledge and
-          selected source assets.
+          Select trusted knowledge and source imagery, then shape a polished
+          output in a focused live preview.
         </p>
       </header>
       {error && <p className="auth-message error">{error}</p>}
@@ -409,19 +409,19 @@ export default function StudioV2() {
         />
         <Choice
           icon={Layers3}
-          title="Project Collection"
+          title="Collection"
           body="A capability introduction followed by project sheets."
           onClick={() => setFlow("collection")}
         />
         <Choice
           icon={Presentation}
-          title="Pitch"
+          title="Pitch Package"
           body="Analyse a briefing and compose an evidence-led visual narrative."
           onClick={() => setFlow("pitch")}
         />
         <Choice
           icon={Users}
-          title="CV"
+          title="CV Package"
           body="Role-safe experience tailored to a brief."
           onClick={() => setFlow("cv")}
         />

@@ -1,6 +1,6 @@
 import {CSSProperties,useEffect,useState} from 'react'
 import {NavLink,Outlet,useLocation} from 'react-router-dom'
-import {BookOpen,FolderKanban,Home,IdCard,LogOut,Menu,Plus,Search,Sparkles,X} from 'lucide-react'
+import {FolderKanban,Home,IdCard,LogOut,Menu,Plus,Search,Sparkles,X} from 'lucide-react'
 import FolionLogo from './FolionLogo'
 import {Button} from './ui'
 import {useStore} from '../store'
@@ -13,12 +13,11 @@ const nav=[
   ['/projects','Projects',FolderKanban],
   ['/studio-v2','Studio',Sparkles],
   ['/folion-id','Folion ID',IdCard],
-  ['/magazine','Magazine',BookOpen],
 ] as const
 
 const routeTitles:Record<string,{eyebrow:string;title:string}>={
   '/home':{eyebrow:'Practice memory',title:'Home'},
-  '/projects':{eyebrow:'Practice memory',title:'Projects'},
+  '/projects':{eyebrow:'Practice Intelligence',title:'Project Deck'},
   '/new-project':{eyebrow:'Practice memory',title:'New project'},
   '/studio-v2':{eyebrow:'Create from memory',title:'Studio'},
   '/folion-id':{eyebrow:'Practice profile',title:'Folion ID'},
@@ -37,7 +36,7 @@ export function Sidebar({open,onClose}:{open:boolean;onClose:()=>void}){
         <button className="icon-btn !grid lg:!hidden" aria-label="Close navigation" onClick={onClose}><X size={18}/></button>
       </div>
       <div className="mt-10">
-        <p className="sidebar-label">Workspace</p>
+        <p className="sidebar-label">Practice Intelligence</p>
         <nav className="mt-2 space-y-1">{nav.map(([to,label,Icon])=><NavLink key={to} to={to} onClick={onClose} className={({isActive})=>`nav-item ${isActive?'active':''}`}><Icon size={18}/><span>{label}</span></NavLink>)}</nav>
       </div>
       <div className="mt-8">
