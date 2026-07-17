@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Folion Pitch Vision — Golden Master</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="deck" aria-label="Folion Pitch Vision static golden master">
+      <figure class="slide" data-slide="1"><img src="./slides/slide-01.png" width="1280" height="720" alt="Pitch Vision slide 1: A community shaped by landscape." /></figure>
+      <figure class="slide" data-slide="2"><img src="./slides/slide-02.png" width="1280" height="720" alt="Pitch Vision slide 2: The opportunity is to create a living landscape." /></figure>
+      <figure class="slide" data-slide="3"><img src="./slides/slide-03.png" width="1280" height="720" alt="Pitch Vision slide 3: Growth must work with ecology, not against it." /></figure>
+      <figure class="slide" data-slide="4"><img src="./slides/slide-04.png" width="1280" height="720" alt="Pitch Vision slide 4: Begin with Country, landscape, movement and community structure." /></figure>
+      <figure class="slide" data-slide="5"><img src="./slides/slide-05.png" width="1280" height="720" alt="Pitch Vision slide 5: Fennell Bay Master Plan evidence." /></figure>
+      <figure class="slide" data-slide="6"><img src="./slides/slide-06.png" width="1280" height="720" alt="Pitch Vision slide 6: Cromer East evidence." /></figure>
+      <figure class="slide" data-slide="7"><img src="./slides/slide-07.png" width="1280" height="720" alt="Pitch Vision slide 7: Erina Precinct evidence." /></figure>
+      <figure class="slide" data-slide="8"><img src="./slides/slide-08.png" width="1280" height="720" alt="Pitch Vision slide 8: A team experienced in turning complex constraints into clear place-led frameworks." /></figure>
+      <figure class="slide" data-slide="9"><img src="./slides/slide-09.png" width="1280" height="720" alt="Pitch Vision slide 9: A place people can belong to before it is built." /></figure>
+    </main>
+    <script>
+      const requestedSlide = Number(new URLSearchParams(window.location.search).get("slide"));
+      if (Number.isInteger(requestedSlide) && requestedSlide >= 1 && requestedSlide <= 9) {
+        document.documentElement.dataset.mode = "single";
+        document.querySelectorAll("[data-slide]").forEach((slide) => {
+          slide.hidden = Number(slide.dataset.slide) !== requestedSlide;
+        });
+      }
+    </script>
+  </body>
+</html>

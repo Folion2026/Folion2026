@@ -1,0 +1,82 @@
+:root {
+  color-scheme: dark;
+  background: #171915;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background: #2b2d29;
+}
+
+.deck {
+  display: grid;
+  justify-items: center;
+  gap: 24px;
+  padding: 24px;
+}
+
+.slide {
+  width: min(1280px, 100%);
+  margin: 0;
+  aspect-ratio: 16 / 9;
+  background: #171915;
+  box-shadow: 0 18px 60px rgb(0 0 0 / 28%);
+}
+
+.slide img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+html[data-mode="single"],
+html[data-mode="single"] body,
+html[data-mode="single"] .deck {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+html[data-mode="single"] .deck {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: #171915;
+}
+
+html[data-mode="single"] .slide {
+  width: min(100vw, calc(100vh * 16 / 9));
+  height: min(100vh, calc(100vw * 9 / 16));
+  box-shadow: none;
+}
+
+@media print {
+  @page {
+    size: 13.333in 7.5in;
+    margin: 0;
+  }
+
+  body,
+  .deck {
+    display: block;
+    padding: 0;
+    background: transparent;
+  }
+
+  .slide {
+    width: 13.333in;
+    height: 7.5in;
+    break-after: page;
+    box-shadow: none;
+  }
+}
