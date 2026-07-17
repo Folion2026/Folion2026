@@ -12,3 +12,17 @@ export async function exportA4Pages(container:HTMLElement,title:string){
  }
  pdf.save(`${safeName(title)}.pdf`)
 }
+
+export async function exportSlideDeck(container:HTMLElement,title:string){
+ const [{default:html2canvas},{jsPDF}]=await Promise.all([import('html2canvas'),import('jspdf')])
+ const slides=[...container.querySelectorAll<HTMLElement>('.pitch-export-slide')]
+ if(!slides.length)throw new Error('No finished Pitch Vision slides are available to export.')
+ const width=338.67,height=190.5
+ const pdf=new jsPDF({orientation:'landscape',unit:'mm',format:[width,height],compress:true})
+ for(const [index,slide] of slides.entries()){
+  if(index)pdf.addPage([width,height],'landscape')
+  const canvas=await html2canvas(slide,{backgroundColor:'#151814',scale:1.5,useCORS:true,logging:false,width:1280,height:720})
+  pdf.addImage(canvas.toDataURL('image/jpeg',.94),'JPEG',0,0,width,height,undefined,'FAST')
+ }
+ pdf.save(`${safeName(title)}.pdf`)
+}
