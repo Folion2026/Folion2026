@@ -14,6 +14,19 @@ import { apiRequest } from "../lib/api";
 import { createUuid } from "../lib/id";
 import { exportA4Pages, exportSlideDeck } from "../lib/exportPdf";
 import {
+  createOpportunityProfile,
+  createProjectContribution,
+  createSelectionNote,
+  matchPeopleForCv,
+  matchProjectsForCv,
+  personCareer,
+  personPortrait,
+  personQualifications,
+  personRegistrations,
+  personYears,
+} from "../lib/cv";
+import type { CvProjectMatch } from "../lib/cv";
+import {
   analysePitchBrief,
   approvedPitchEvidence,
   createPitchSlides,
@@ -30,6 +43,7 @@ import "../studio-sheet.css";
 import {
   Asset,
   Collection,
+  Person,
   Project,
   StudioPackage,
   StudioPackageMode,
@@ -346,7 +360,7 @@ export default function StudioV2() {
       <PackageWorkspace
         item={active}
         projects={projects}
-        people={people.filter(person=>person.status==='active')}
+        people={people}
         workspace={workspace}
         onBack={close}
       />
@@ -1213,7 +1227,46 @@ function PitchSetup({
     </Setup>
   );
 }
-function CvSetup({
+function CvSetup({projects,people,onBack,onCreated}:{projects:Project[];people:Person[];onBack:()=>void;onCreated:(item:StudioPackage)=>void}) {
+  const {session}=useAuth();
+  const [mode,setMode]=useState<StudioPackageMode>('internal'),[brief,setBrief]=useState(''),[peopleMatched,setPeopleMatched]=useState(false),[personIds,setPersonIds]=useState<string[]>([]),[projectsMatched,setProjectsMatched]=useState(false),[projectMatches,setProjectMatches]=useState<CvProjectMatch[]>([]),[selectedEvidence,setSelectedEvidence]=useState<string[]>([]),[saving,setSaving]=useState(false),[error,setError]=useState('');
+  const personMatches=useMemo(()=>matchPeopleForCv(brief,people,projects,mode),[brief,people,projects,mode]);
+  const evidenceKey=(match:CvProjectMatch)=>`${match.personId}:${match.project.id}`;
+  const resetProjects=()=>{setProjectsMatched(false);setProjectMatches([]);setSelectedEvidence([])};
+  const resetAll=()=>{setPeopleMatched(false);setPersonIds([]);resetProjects();setError('')};
+  const matchPeople=()=>{if(!brief.trim())return setError('Enter a CV Package Brief before matching people.');setPeopleMatched(true);setPersonIds([]);resetProjects();setError('')};
+  const togglePerson=(id:string)=>{setPersonIds(current=>current.includes(id)?current.filter(value=>value!==id):[...current,id]);resetProjects();setError('')};
+  const matchProjects=()=>{if(!personIds.length)return setError('Select at least one person before matching projects.');const matches=matchProjectsForCv(brief,personIds,projects,mode);setProjectMatches(matches);setSelectedEvidence(matches.map(evidenceKey));setProjectsMatched(true);const missing=personIds.filter(id=>!matches.some(match=>match.personId===id)).map(id=>people.find(person=>person.id===id)?.name).filter(Boolean);setError(missing.length?`${missing.join(', ')} has no eligible explicit Person → Project → Role record with approved project knowledge.`:'')};
+  const create=async()=>{
+    if(!session||!personIds.length)return setError('Select at least one person.');
+    if(!projectsMatched)return setError('Click Match Projects before creating the CV Package.');
+    const chosen=projectMatches.filter(match=>selectedEvidence.includes(evidenceKey(match))),missing=personIds.filter(id=>!chosen.some(match=>match.personId===id)).map(id=>people.find(person=>person.id===id)?.name).filter(Boolean);
+    if(missing.length)return setError(`${missing.join(', ')} needs at least one selected explicit project-role record.`);
+    setSaving(true);
+    try{
+      const profiles=people.filter(person=>personIds.includes(person.id));
+      const sections=profiles.flatMap((person,personIndex)=>{const matches=chosen.filter(match=>match.personId===person.id).slice(0,3);return[
+        {...section('cv_profile',`${person.name} · Opportunity Profile`,createOpportunityProfile(person,brief,matches),personIndex*10,[{sourceType:'approved_person_profile',sourceId:person.id,sourcePersonId:person.id,sourceStatus:'approved'}]),manualContent:{personId:person.id}},
+        ...matches.map((match,index)=>({...section('cv_experience',match.project.projectName,createProjectContribution(person,match),personIndex*10+index+1,[{...source(match.project,'explicit_project_role'),sourcePersonId:person.id}]),manualContent:{personId:person.id,projectId:match.project.id,role:match.member.projectRole,location:match.project.location,year:match.project.year}})),
+        {...section('cv_selection_note',`${person.name} · Selection Note`,createSelectionNote(matches),personIndex*10+9,matches.map(match=>({...source(match.project,'explicit_project_role'),sourcePersonId:person.id}))),manualContent:{personId:person.id}},
+      ]});
+      const projectIds=[...new Set(chosen.map(match=>match.project.id))];
+      const result=await apiRequest<{package:StudioPackage}>(session,'/v1/packages',{method:'POST',body:JSON.stringify({packageType:'cv',title:profiles.length===1?`${profiles[0].name} · CV Package`:'CV Package · Selected Team',mode,state:'draft',data:{template:'studio-v2-cv-golden-master',brief,maximumPagesPerPerson:2,selectedEvidence},sections,projectIds,personIds,assetIds:[]})});
+      onCreated(result.package);
+    }catch(reason){setError(reason instanceof Error?reason.message:'CV package could not be created')}finally{setSaving(false)}
+  };
+  return <Setup title="Create a CV Package" onBack={onBack} error={error}>
+    <Mode value={mode} onChange={value=>{setMode(value);resetAll()}}/>
+    <label className="label">CV Package Brief<textarea value={brief} onChange={event=>{setBrief(event.target.value);resetAll()}} placeholder="Describe the opportunity, expertise, sectors, services and experience this CV Package needs to demonstrate."/></label>
+    <button className="sv2-primary" disabled={!brief.trim()} onClick={matchPeople}>Match Best</button>
+    {peopleMatched&&<Field title="Ranked people · strongest to weakest">{personMatches.map(({person,evidenceProjects,reasons})=><SelectRow key={person.id} checked={personIds.includes(person.id)} type="checkbox" title={person.name} detail={`${person.position}${reasons.length?` · ${reasons.join(' · ')}`:''}${evidenceProjects.length?` · ${evidenceProjects.map(project=>project.projectName).join(', ')}`:''}`} onChange={()=>togglePerson(person.id)}/>)}</Field>}
+    {peopleMatched&&<button className="sv2-primary" disabled={!personIds.length} onClick={matchProjects}>Match Projects</button>}
+    {projectsMatched&&personIds.map(personId=>{const person=people.find(value=>value.id===personId),matches=projectMatches.filter(match=>match.personId===personId);return <Field key={personId} title={`${person?.name||'Selected person'} · explicit project-role evidence`}>{!matches.length?<p className="auth-message error">No eligible explicit Person → Project → Role records were found.</p>:matches.map(match=><SelectRow key={evidenceKey(match)} checked={selectedEvidence.includes(evidenceKey(match))} type="checkbox" title={match.project.projectName} detail={`${match.member.projectRole} · ${match.project.location}${match.reasons.length?` · ${match.reasons.join(' · ')}`:''}`} onChange={()=>setSelectedEvidence(current=>current.includes(evidenceKey(match))?current.filter(key=>key!==evidenceKey(match)):[...current,evidenceKey(match)])}/>)}</Field>})}
+    <div className="sv2-cv-create"><button className="sv2-primary" disabled={saving||!projectsMatched||!personIds.length} onClick={create}>{saving?'Creating…':'Create CV Package'}</button><small>Folion will create exactly two A4 pages per selected person and use no inferred project experience.</small></div>
+  </Setup>;
+}
+
+function CvSetupLegacy({
   projects,
   people,
   onBack,
@@ -1895,13 +1948,7 @@ function PackageWorkspace({
 }: {
   item: StudioPackage;
   projects: Project[];
-  people: {
-    id: string;
-    name: string;
-    position: string;
-    bio?: string;
-    skills?: string[];
-  }[];
+  people: Person[];
   workspace: ReturnType<typeof useStore>['workspace'];
   onBack: () => void;
 }) {
@@ -2584,7 +2631,51 @@ function ProjectSheetPageNew({
   );
 }
 
-function CvPagesNew({
+function CvBrand({workspace,className}:{workspace:ReturnType<typeof useStore>['workspace'];className?:string}){
+  const name=workspace?.firmProfile.firmName||workspace?.name||'Firm name',logo=workspace?.brandKit.logoUrl;
+  return <div className={className}>{logo?<img src={logo} alt={name}/>:<strong>{name}</strong>}</div>;
+}
+
+function CvPagesNew({item,projects,people,workspace}:{item:StudioPackage;projects:Project[];people:Person[];workspace:ReturnType<typeof useStore>['workspace']}) {
+  const firmName=workspace?.firmProfile.firmName||workspace?.name||'Firm name',brief=String(item.data.brief||'').trim();
+  const personForSection=(value:StudioSection)=>String(value.manualContent?.personId||value.sources?.[0]?.sourcePersonId||'');
+  return <>{people.filter(person=>item.personIds.includes(person.id)).flatMap(person=>{
+    const profileSection=item.sections.find(value=>value.sectionType==='cv_profile'&&personForSection(value)===person.id),experienceSections=item.sections.filter(value=>value.sectionType==='cv_experience'&&personForSection(value)===person.id).sort((a,b)=>a.sectionOrder-b.sectionOrder).slice(0,3),selectionNote=item.sections.find(value=>value.sectionType==='cv_selection_note'&&personForSection(value)===person.id),qualifications=personQualifications(person),registrations=personRegistrations(person),career=personCareer(person),years=personYears(person),portrait=personPortrait(person),initials=person.name.split(/\s+/).map(part=>part[0]).join('').slice(0,3).toUpperCase();
+    return [
+      <article className="sv2-page cv-golden-page cv-golden-profile" key={`${person.id}-profile`}>
+        <header className="cv-golden-topbar"><CvBrand workspace={workspace} className="cv-golden-lockup"/><div>CV Package{brief?` · ${truncateForCvHeader(brief)}`:''}</div></header>
+        <main className="cv-golden-profile-content">
+          <section className="cv-golden-identity"><div className="cv-golden-portrait">{portrait?<img src={portrait} alt={person.name}/>:<span>{initials}</span>}</div><div><p className="cv-golden-eyebrow">{person.position}</p><h2>{person.name}</h2>{person.bio&&<p className="cv-golden-lead">{truncateForCvLead(person.bio)}</p>}</div></section>
+          <div className="cv-golden-rule"/>
+          <section className="cv-golden-profile-grid"><div className="cv-golden-label">Profile for this opportunity</div><div className="cv-golden-profile-text"><p>{profileSection?.body||person.bio}</p></div></section>
+          <section className="cv-golden-credentials">
+            <article><div className="cv-golden-label">Experience</div>{years&&<div className="cv-golden-credential-value">{years}</div>}</article>
+            <article><div className="cv-golden-label">Qualifications</div>{qualifications.length>0&&<p>{qualifications.join('\n')}</p>}</article>
+            <article><div className="cv-golden-label">Registrations</div>{registrations.length>0&&<p>{registrations.join('\n')}</p>}</article>
+          </section>
+          <div className="cv-golden-rule"/>
+          <section className="cv-golden-expertise-grid"><div className="cv-golden-label">Relevant expertise</div><div className="cv-golden-tags">{person.skills.slice(0,6).map(skill=><span key={skill}>{skill}</span>)}</div></section>
+          <section className="cv-golden-employment"><div className="cv-golden-label">Current role</div><div><strong>{[person.position,firmName].filter(Boolean).join(' · ')}</strong>{career[0]&&<p>{career[0]}</p>}</div></section>
+          <CvFooter workspace={workspace}/>
+        </main>
+      </article>,
+      <article className="sv2-page cv-golden-page cv-golden-experience" key={`${person.id}-experience`}>
+        <header className="cv-golden-page-header"><div><p className="cv-golden-eyebrow">{person.name}</p><h2>Relevant Experience</h2></div><div className="cv-golden-page-index">02 / 02</div></header>
+        <main className="cv-golden-experience-content">
+          {experienceSections.map(value=>{const projectId=String(value.manualContent?.projectId||value.sources?.[0]?.sourceProjectId||''),project=projects.find(candidate=>candidate.id===projectId),role=String(value.manualContent?.role||project?.team.find(member=>member.personId===person.id)?.projectRole||''),location=String(value.manualContent?.location||project?.location||''),year=String(value.manualContent?.year||project?.year||'');return <article className="cv-golden-project" key={value.id}><div className="cv-golden-project-head"><div><h3>{value.title||project?.projectName}</h3><p>{[location,year].filter(Boolean).join(' · ')}</p></div><div className="cv-golden-role">{role}</div></div><p className="cv-golden-contribution">{value.body}</p></article>})}
+          {selectionNote?.body&&<aside className="cv-golden-selection"><span className="cv-golden-label">Why these projects</span><p>{selectionNote.body}</p></aside>}
+          <CvFooter workspace={workspace}/>
+        </main>
+      </article>,
+    ];
+  })}</>;
+}
+
+const truncateForCvHeader=(value:string)=>{const words=value.split(/\s+/).filter(Boolean);return words.length<=8?value:`${words.slice(0,8).join(' ')}…`};
+const truncateForCvLead=(value:string)=>{const words=value.split(/\s+/).filter(Boolean);return words.length<=42?value:`${words.slice(0,42).join(' ').replace(/[,:;.!?]+$/,'')}…`};
+function CvFooter({workspace}:{workspace:ReturnType<typeof useStore>['workspace']}){return <footer className="cv-golden-footer"><CvBrand workspace={workspace} className="cv-golden-footer-brand"/><div>Generated with FOLION</div></footer>}
+
+function CvPagesNewLegacy({
   item,
   projects,
   people,
