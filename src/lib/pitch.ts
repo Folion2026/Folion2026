@@ -47,6 +47,8 @@ const stopWords = new Set([
   "there", "these", "they", "this", "through", "what", "where", "which",
   "while", "with", "would", "your", "that", "than", "will", "project",
   "pitch", "opportunity", "looking", "seeking", "need", "needs",
+  "capability", "compelling", "create", "creating", "demonstrate",
+  "demonstrating", "proposal", "regional", "south", "wales",
 ]);
 
 const clean = (value: unknown) =>
@@ -63,14 +65,17 @@ const firstSentence = (value: string) =>
   clean(value).split(/(?<=[.!?])\s+/)[0]?.trim() || "";
 
 const themesFrom = (value: string) => {
-  const counts = new Map<string, number>();
+  const counts = new Map<string, { count: number; index: number }>();
   clean(value)
     .toLowerCase()
     .split(/[^a-z0-9-]+/)
     .filter((word) => word.length > 4 && !stopWords.has(word))
-    .forEach((word) => counts.set(word, (counts.get(word) || 0) + 1));
+    .forEach((word, index) => {
+      const current = counts.get(word);
+      counts.set(word, { count: (current?.count || 0) + 1, index: current?.index ?? index });
+    });
   return [...counts]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .sort((a, b) => b[1].count - a[1].count || a[1].index - b[1].index)
     .map(([word]) => word)
     .slice(0, 7);
 };
@@ -150,12 +155,19 @@ export function analysePitchBrief(
     lead = projects.find((project) => project.id === matches[0]?.projectId),
     leadTheme = themes[0] || lead?.sector || "place",
     secondTheme = themes[1] || lead?.services[0] || "purpose",
-    briefOpening = trimWords(firstSentence(brief), 18),
+    briefOpening = trimWords(
+      firstSentence(brief).replace(
+        /^(?:create|develop|deliver)\s+(?:a|an)\s+(?:(?:clear|compelling|strong)\s+)?(?:vision|proposal|strategy)\s+for\s+/i,
+        "A ",
+      ),
+      12,
+    ),
     firmStatement = trimWords(firstSentence(firm.firmStatement), 22),
     centralIdea = briefOpening || `A ${leadTheme} vision shaped by ${secondTheme}.`,
     opportunityStatement = briefOpening || `Create a ${leadTheme} response grounded in ${secondTheme}.`,
+    groundingTheme = themes.find((theme) => ["landscape", "ecology", "community", "movement", "housing", "nature", "nature-led"].includes(theme)) || leadTheme,
     challengeInterpretation = themes.length > 1
-      ? `${capitalise(themes[0])} must work with ${themes[1]}, not against it.`
+      ? `Growth must work with ${groundingTheme.replace("nature-led", "nature")}, not against it.`
       : `The response must make ${leadTheme} tangible.`,
     firmPointOfView = firmStatement ||
       `Begin with ${[leadTheme, secondTheme, themes[2]].filter(Boolean).join(", ")}.`,
