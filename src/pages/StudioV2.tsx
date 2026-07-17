@@ -12,7 +12,13 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth";
 import { apiRequest } from "../lib/api";
 import { createUuid } from "../lib/id";
-import { exportA4Pages } from "../lib/exportPdf";
+import { exportA4Pages, exportSlideDeck } from "../lib/exportPdf";
+import {
+  analysePitchBrief,
+  approvedPitchEvidence,
+  createPitchSlides,
+} from "../lib/pitch";
+import type { PitchIntelligence, PitchSlide } from "../lib/pitch";
 import {
   approvedDraftSections,
   reviewedKnowledgeFacts,
@@ -367,6 +373,7 @@ export default function StudioV2() {
     return (
       <PitchSetup
         projects={projects}
+        workspace={workspace}
         onBack={() => setFlow("home")}
         onCreated={created}
       />
@@ -1006,10 +1013,12 @@ function CollectionSetup({
 }
 function PitchSetup({
   projects,
+  workspace,
   onBack,
   onCreated,
 }: {
   projects: Project[];
+  workspace: ReturnType<typeof useStore>["workspace"];
   onBack: () => void;
   onCreated: (item: StudioPackage) => void;
 }) {
@@ -1017,105 +1026,73 @@ function PitchSetup({
   const [mode, setMode] = useState<StudioPackageMode>("internal"),
     [briefing, setBriefing] = useState(""),
     [projectIds, setProjectIds] = useState<string[]>([]),
-    [analysed,setAnalysed]=useState(false),
-    [analysing,setAnalysing]=useState(false),
+    [analysis, setAnalysis] = useState<PitchIntelligence | null>(null),
+    [analysing, setAnalysing] = useState(false),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
-  const eligible = projects.filter((project) => eligibleProject(project, mode)&&(approvedDraftSections(project).length>0||(project.approvedEvidence?.length||0)>0)),
-    pitchThemes=[...new Set(briefing.toLowerCase().split(/\W+/).filter(word=>word.length>4))],
-    ranked=eligible.map(project=>{const corpus=[project.projectName,project.sector,project.client,project.location,...project.services,...project.tags,project.story.challenge,project.story.response,project.story.outcome,project.whyItMatters,projectNarrative(project)].join(" ").toLowerCase(),covered=pitchThemes.filter(theme=>corpus.includes(theme));return{project,covered,missing:pitchThemes.filter(theme=>!covered.includes(theme))}}).sort((a,b)=>b.covered.length-a.covered.length);
-  const toggle = (id: string) =>
-    setProjectIds((current) =>
-      current.includes(id)
-        ? current.filter((value) => value !== id)
-        : [...current, id],
-    );
-  const move=(id:string,direction:-1|1)=>setProjectIds(current=>{const index=current.indexOf(id),next=index+direction;if(index<0||next<0||next>=current.length)return current;const copy=[...current];[copy[index],copy[next]]=[copy[next],copy[index]];return copy});
-  const analyse=()=>{if(!briefing.trim())return setError("Enter a Pitch Briefing.");if(!eligible.length)return setError("No project evidence is available for matching.");setAnalysing(true);setError("");setTimeout(()=>{setAnalysing(false);if(!ranked[0]?.covered.length){setAnalysed(false);setError("No adequate project evidence matched this Pitch Briefing.");return}setAnalysed(true);setProjectIds([])},250)};
+  const eligible = projects.filter(
+      (project) => eligibleProject(project, mode) && approvedPitchEvidence(project).length > 0,
+    ),
+    ranked = (analysis?.matches || [])
+      .map((match) => ({
+        match,
+        project: eligible.find((project) => project.id === match.projectId),
+      }))
+      .filter((value): value is { match: PitchIntelligence["matches"][number]; project: Project } => Boolean(value.project));
+  const toggle = (id: string) => {
+    setError("");
+    setProjectIds((current) => {
+      if (current.includes(id)) return current.filter((value) => value !== id);
+      if (current.length >= 3) {
+        setError("Select exactly three projects. Remove one before choosing another.");
+        return current;
+      }
+      return [...current, id];
+    });
+  };
+  const move = (id: string, direction: -1 | 1) =>
+    setProjectIds((current) => {
+      const index = current.indexOf(id), next = index + direction;
+      if (index < 0 || next < 0 || next >= current.length) return current;
+      const copy = [...current];
+      [copy[index], copy[next]] = [copy[next], copy[index]];
+      return copy;
+    });
+  const analyse = () => {
+    if (!briefing.trim()) return setError("Enter a Pitch Briefing before analysing.");
+    if (eligible.length < 3)
+      return setError("At least three Ready for Studio projects with approved knowledge are required for this nine-slide Pitch Vision.");
+    if (!workspace) return setError("Workspace Brand Kit and firm details could not be loaded.");
+    setAnalysing(true);
+    setError("");
+    window.setTimeout(() => {
+      setAnalysis(analysePitchBrief(briefing, eligible, workspace.firmProfile));
+      setProjectIds([]);
+      setAnalysing(false);
+    }, 250);
+  };
   const create = async () => {
     if (!session) return;
     if (!briefing.trim()) return setError("Enter a Pitch Briefing.");
-    if (!analysed || !projectIds.length)
-      return setError("Analyse the briefing and select at least one matched project.");
+    if (!analysis) return setError("Analyse the Pitch Briefing before creating the Pitch Vision.");
+    if (projectIds.length !== 3)
+      return setError("Select exactly three ranked projects to complete the evidence sequence.");
     setSaving(true);
     try {
       const selected = projectIds
           .map((id) => projects.find((project) => project.id === id))
           .filter(Boolean) as Project[],
-        lead = selected[0],
-        services = [
-          ...new Set(selected.flatMap((project) => project.services)),
-        ].slice(0, 5),
-        slides = [
-          {
-            kind: "cover",
-            title:
-              briefing.trim().split(/[.!?]/)[0].slice(0, 90) ||
-              "A proposition for place",
-            body: [lead.story.response,lead.whyItMatters].filter(populated).join(" "),
-            projectId: lead.id,
-            assetId: imageAssets(lead)[0]?.id,
-          },
-          {
-            kind: "tension",
-            title: "The defining opportunity",
-            body: briefing.trim(),
-            projectId: lead.id,
-            assetId: imageAssets(lead)[0]?.id,
-          },
-          {
-            kind: "success",
-            title: "What success needs to achieve",
-            body: [lead.story.challenge, lead.whyItMatters]
-              .filter(Boolean)
-              .join(" "),
-            projectId: lead.id,
-            assetId: imageAssets(lead)[1]?.id || imageAssets(lead)[0]?.id,
-          },
-          {
-            kind: "precedent",
-            title: "Precedent that makes the ambition tangible",
-            body: projectNarrative(lead),
-            projectId: lead.id,
-            assetId: imageAssets(lead)[0]?.id,
-          },
-          ...selected
-            .slice(1, 3)
-            .map((project, index) => ({
-              kind: "evidence",
-              title: index
-                ? "Evidence for enduring relevance"
-                : "A response grounded in place",
-              body: [project.story.response, project.story.outcome]
-                .filter(Boolean)
-                .join(" "),
-              projectId: project.id,
-              assetId: imageAssets(project)[0]?.id,
-            })),
-          {
-            kind: "proof",
-            title: "Capability assembled around the brief",
-            body: services.length
-              ? services.join(" · ")
-              : selected
-                  .map((project) => project.sector)
-                  .filter(Boolean)
-                  .join(" · "),
-            projectId: lead.id,
-            assetId: imageAssets(lead)[2]?.id || imageAssets(lead)[0]?.id,
-          },
-          {
-            kind: "close",
-            title: "A clear next move",
-            body: selected.map(project=>project.story.outcome||project.whyItMatters).filter(populated).join(" "),
-            projectId: lead.id,
-            assetId: imageAssets(lead)[0]?.id,
-          },
-        ].slice(0, 8);
+        slides = createPitchSlides(analysis, selected);
       const sections = slides.map((slide, index) =>
-        section("pitch_slide", slide.title, slide.body, index, [
-          source(projects.find((project) => project.id === slide.projectId)!),
-        ]),
+        section(
+          "pitch_slide",
+          slide.title,
+          slide.body,
+          index,
+          slide.projectId
+            ? [source(projects.find((project) => project.id === slide.projectId)!)]
+            : [],
+        ),
       );
       const result = await apiRequest<{ package: StudioPackage }>(
         session,
@@ -1124,14 +1101,22 @@ function PitchSetup({
           method: "POST",
           body: JSON.stringify({
             packageType: "pitch",
-            title: slides[0].title,
+            title: analysis.centralIdea,
             mode,
             state: "draft",
-            data: { template: "studio-v2-pitch", briefing, slides },
+            data: {
+              template: "studio-v2-pitch-golden-master",
+              briefing,
+              analysis,
+              slides,
+            },
             sections,
             projectIds,
             personIds: [],
-            assetIds: slides.map((slide) => slide.assetId).filter(Boolean),
+            assetIds: [
+              ...slides.map((slide) => slide.assetId),
+              ...slides.flatMap((slide) => slide.supportingAssetIds || []),
+            ].filter(Boolean),
           }),
         },
       );
@@ -1153,20 +1138,78 @@ function PitchSetup({
         onChange={(value) => {
           setMode(value);
           setProjectIds([]);
-          setAnalysed(false);
+          setAnalysis(null);
         }}
       />
       <label className="label">
         Pitch Briefing
         <textarea
           value={briefing}
-          onChange={(event) => {setBriefing(event.target.value);setAnalysed(false);setProjectIds([])}}
+          onChange={(event) => {
+            setBriefing(event.target.value);
+            setAnalysis(null);
+            setProjectIds([]);
+          }}
           placeholder="Describe what is being pitched, the opportunity, tension and desired narrative."
         />
       </label>
-      <button className="sv2-primary" disabled={analysing||!briefing.trim()} onClick={analyse}>{analysing?"Analysing…":"Analyse Pitch"}</button>
-      {analysed&&<Field title={`Ranked project matches · ${projectIds.length} selected`}><div className="sv2-pitch-matches">{ranked.map(({project,covered,missing},index)=>{const image=imageAssets(project)[0];return <article key={project.id} className={projectIds.includes(project.id)?"selected":""}>{image&&<img src={image.url} alt=""/>}<div><span>#{index+1}</span><h3>{project.projectName}</h3><p>{[project.year,project.client,project.location].filter(populated).join(" · ")}</p><strong>{covered.length} of {pitchThemes.length} pitch themes evidenced</strong><p>Why it matches: {[project.sector,...project.services,project.story.response].filter(populated).slice(0,4).join(" · ")}</p>{missing.length>0&&<small>Weak or missing evidence: {missing.slice(0,5).join(", ")}</small>}</div><button type="button" onClick={()=>toggle(project.id)}>{projectIds.includes(project.id)?"Selected":"Select"}</button></article>})}</div>{projectIds.length>1&&<div className="sv2-order">{projectIds.map((id,index)=><div key={id}><span>{index+1}. {projects.find(project=>project.id===id)?.projectName}</span><button disabled={index===0} onClick={()=>move(id,-1)}>↑</button><button disabled={index===projectIds.length-1} onClick={()=>move(id,1)}>↓</button></div>)}</div>}</Field>}
-      {analysed&&<button className="sv2-primary" disabled={saving||!projectIds.length} onClick={create}>{saving?"Creating…":"Create Pitch"}</button>}
+      <button className="sv2-primary" disabled={analysing || !briefing.trim()} onClick={analyse}>
+        {analysing ? "Analysing…" : "Analyse Pitch"}
+      </button>
+      {analysis && (
+        <section className="sv2-pitch-intelligence">
+          <p className="eyebrow">Folion Pitch Thesis</p>
+          <h2>{analysis.centralIdea}</h2>
+          <p>{analysis.challengeInterpretation}</p>
+          <small>Evidence themes · {analysis.evidenceThemes.join(" · ") || "No explicit themes identified"}</small>
+        </section>
+      )}
+      {analysis && (
+        <Field title={`Ranked project matches · ${projectIds.length} of 3 selected`}>
+          <div className="sv2-pitch-matches">
+            {ranked.map(({ project, match }, index) => {
+              const image = imageAssets(project)[0];
+              return (
+                <article key={project.id} className={projectIds.includes(project.id) ? "selected" : ""}>
+                  {image && <img src={image.url} alt="" />}
+                  <div>
+                    <span>#{index + 1}</span>
+                    <h3>{project.projectName}</h3>
+                    <p>{[project.year, project.client, project.location].filter(populated).join(" · ")}</p>
+                    <strong>{match.coveredThemes.length} briefing themes evidenced</strong>
+                    <p>Why it supports the argument: {match.rationale}</p>
+                    {match.evidenceGaps.length > 0 && (
+                      <small>Weak or missing evidence: {match.evidenceGaps.slice(0, 5).join(", ")}</small>
+                    )}
+                  </div>
+                  <button type="button" onClick={() => toggle(project.id)}>
+                    {projectIds.includes(project.id) ? "Selected" : "Select"}
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+          {projectIds.length > 1 && (
+            <div className="sv2-order">
+              {projectIds.map((id, index) => (
+                <div key={id}>
+                  <span>{index + 1}. {projects.find((project) => project.id === id)?.projectName}</span>
+                  <button disabled={index === 0} onClick={() => move(id, -1)}>↑</button>
+                  <button disabled={index === projectIds.length - 1} onClick={() => move(id, 1)}>↓</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </Field>
+      )}
+      {analysis && (
+        <div className="sv2-pitch-create">
+          <button className="sv2-primary" disabled={saving || projectIds.length !== 3} onClick={create}>
+            {saving ? "Creating…" : "Create Pitch Vision"}
+          </button>
+          {projectIds.length !== 3 && <small>Select exactly three ranked projects to complete the approved nine-slide sequence.</small>}
+        </div>
+      )}
     </Setup>
   );
 }
@@ -1866,9 +1909,21 @@ function PackageWorkspace({
   const pagesRef = useRef<HTMLElement>(null),
     [exporting, setExporting] = useState(false),
     [exportError, setExportError] = useState(""),
-    canExport = item.packageType !== "pitch";
+    canExport = true;
   const download = async () => {
     if (!pagesRef.current) return;
+    if (item.packageType === "pitch") {
+      setExportError("");
+      setExporting(true);
+      try {
+        await exportSlideDeck(pagesRef.current, item.title);
+      } catch (reason) {
+        setExportError(reason instanceof Error ? reason.message : "Pitch Vision export failed.");
+      } finally {
+        setExporting(false);
+      }
+      return;
+    }
     const pages = [...pagesRef.current.querySelectorAll<HTMLElement>(".sv2-page")],
       overflowing = pages.some(
         (page) => page.scrollHeight > page.clientHeight + 2 || page.scrollWidth > page.clientWidth + 2,
@@ -1906,7 +1961,7 @@ function PackageWorkspace({
           <span>Saved · {new Date(item.updatedAt).toLocaleString()}</span>
           {canExport ? (
             <button className="sv2-primary" disabled={exporting} onClick={() => void download()}>
-              <FileDown size={16} /> {exporting ? "Preparing PDF…" : "Export PDF"}
+              <FileDown size={16} /> {exporting ? "Preparing PDF…" : item.packageType === "pitch" ? "Export Pitch PDF" : "Export PDF"}
             </button>
           ) : (
             <button disabled>Preview only — export coming next</button>
@@ -1920,7 +1975,7 @@ function PackageWorkspace({
         ) : item.packageType === "project_collection" ? (
           <CollectionPages item={item} projects={projects} workspace={workspace} />
         ) : item.packageType === "pitch" ? (
-          <PitchPages item={item} projects={projects} />
+          <PitchPages item={item} projects={projects} workspace={workspace} />
         ) : item.packageType === "cv" ? (
           <CvPagesNew item={item} projects={projects} people={people} workspace={workspace} />
         ) : (
@@ -2283,18 +2338,14 @@ function TenderPages({
 function PitchPages({
   item,
   projects,
+  workspace,
 }: {
   item: StudioPackage;
   projects: Project[];
+  workspace: ReturnType<typeof useStore>["workspace"];
 }) {
   const initialSlides = Array.isArray(item.data.slides)
-      ? (item.data.slides as Array<{
-          kind: string;
-          title: string;
-          body: string;
-          projectId: string;
-          assetId?: string;
-        }>)
+      ? (item.data.slides as PitchSlide[])
       : [],
     [slides,setSlides]=useState(initialSlides),
     [active, setActive] = useState<number | null>(null);
@@ -2302,20 +2353,51 @@ function PitchPages({
     slide: (typeof slides)[number],
     index: number,
     preview = false,
+    exportMode = false,
   ) => {
     const project = projects.find((value) => value.id === slide.projectId),
-      asset = project?.assets.find((value) => value.id === slide.assetId);
+      asset = project?.assets.find((value) => value.id === slide.assetId),
+      supportingAssets = (slide.supportingAssetIds || [])
+        .map((id) => projects.flatMap((value) => value.assets).find((value) => value.id === id))
+        .filter(Boolean) as Asset[],
+      firmName = workspace?.firmProfile.firmName || workspace?.name || "",
+      logoUrl = workspace?.brandKit.logoUrl,
+      style = {
+        "--pitch-primary": workspace?.brandKit.primaryColour || "#151814",
+        "--pitch-accent": workspace?.brandKit.accentColour || "#d6ff3f",
+        "--pitch-text": workspace?.brandKit.textColour || "#151814",
+        "--pitch-paper": workspace?.brandKit.backgroundColour || "#f5f3ed",
+      } as React.CSSProperties;
     return (
       <article
-        className={`sv2-slide ${slide.kind} ${preview ? "preview" : ""}`}
+        className={`sv2-slide pitch-golden ${slide.kind} ${preview ? "preview" : ""} ${exportMode ? "pitch-export-slide" : ""}`}
         key={`${slide.title}-${index}`}
+        style={style}
       >
-        {asset?.url && <img src={asset.url} alt="" />}
-        <div>
-          <span>{String(index + 1).padStart(2, "0")}</span>
+        {asset?.url && <img className="pitch-golden-background" src={asset.url} alt="" />}
+        {slide.kind === "credibility" && supportingAssets.length > 0 && (
+          <div className="pitch-golden-strips" aria-hidden="true">
+            {supportingAssets.slice(0, 3).map((value) => <img key={value.id} src={value.url} alt="" />)}
+          </div>
+        )}
+        <div className="pitch-golden-brand">
+          {logoUrl ? <img className="pitch-golden-logo" src={logoUrl} alt={firmName} /> : <strong>{firmName}</strong>}
+        </div>
+        <div className="pitch-golden-copy">
+          <span>{slide.eyebrow || `Slide ${String(index + 1).padStart(2, "0")}`}</span>
           <h2>{slide.title}</h2>
+          <i aria-hidden="true" />
           <p>{slide.body}</p>
         </div>
+        <aside className="pitch-golden-rail">
+          <span>Folion / Pitch Vision</span>
+          <b>F</b>
+          <small>{String(index + 1).padStart(2, "0")}</small>
+        </aside>
+        <footer>
+          <span>{firmName}</span>
+          <span>Generated with FOLION</span>
+        </footer>
       </article>
     );
   };
@@ -2345,6 +2427,9 @@ function PitchPages({
         ))}
       </div>
       <section className="sv2-slide-editor"><h3>Review key statements</h3>{slides.map((slide,index)=><label className="label" key={`${slide.kind}-${index}`}>Slide {index+1}<input value={slide.title} onChange={event=>setSlides(current=>current.map((value,i)=>i===index?{...value,title:event.target.value}:value))}/><textarea value={slide.body} onChange={event=>setSlides(current=>current.map((value,i)=>i===index?{...value,body:event.target.value}:value))}/></label>)}</section>
+      <div className="pitch-export-deck" aria-hidden="true">
+        {slides.map((slide, index) => render(slide, index, false, true))}
+      </div>
       {active !== null && slides[active] && (
         <div className="sv2-present">
           <button className="sv2-present-close" onClick={() => setActive(null)}>
