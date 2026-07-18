@@ -52,7 +52,7 @@ import {
 } from "../types";
 
 type Flow = "home" | "sheet" | "collection" | "pitch" | "cv" | "tender";
-type SheetVariant = "hero" | "plan" | "collage";
+type SheetVariant = "hero";
 const labels: Record<StudioPackageType, string> = {
   single_project_sheet: "Project Sheet",
   project_collection: "Project Collection",
@@ -207,35 +207,36 @@ const generateProjectDescription = (project: Project) => {
     220,
   );
 };
-const generateKeyFocus = (project: Project) => {
-  const challenge = approvedRecordValue(
-      project,
-      [...approvedNarrative(project, ["challenge_opportunity"]), ...approvedDraft(project, "challenge")],
-      [project.story.challenge, project.knowledge?.teamInput.challengeOpportunity],
-    )[0],
-    response = approvedRecordValue(
-      project,
-      [...approvedNarrative(project, ["distinctive_response", "response"]), ...approvedDraft(project, "response")],
-      [project.story.response, project.knowledge?.teamInput.teamResponse],
-    )[0],
-    outcome = approvedRecordValue(
-      project,
-      [...approvedNarrative(project, ["outcome_future_relevance", "future_relevance", "precedent_strength"]), ...approvedDraft(project, "outcome")],
-      [project.story.outcome, project.whyItMatters, project.story.lessons],
-    )[0],
-    role = reviewedKnowledgeFacts(project).find(
-      (fact) => fact.key === "scope" || fact.key === "practice",
-    )?.value || project.identity?.role?.join(", ");
-  return uniqueIntelligence([
-    challenge,
-    response,
-    role ? `The approved record defines the company's contribution as ${role}.` : "",
-    outcome,
-  ]).slice(0, 5).join(" ");
-};
+const curatedProjectMetrics = (project: Project) => [
+  { label: "Site area", value: project.siteArea },
+  { label: "GFA", value: project.gfa },
+  { label: "Height", value: project.height },
+  { label: "Dwellings", value: project.metrics?.dwellings },
+  { label: "FSR", value: project.metrics?.fsr },
+  { label: "Public domain", value: project.metrics?.publicDomain || project.metrics?.publicDomainPercentage },
+].filter((fact) => populated(fact.value)).slice(0, 4);
+const generatedInnovation = (project: Project) => trimAtSentence(uniqueIntelligence(approvedRecordValue(
+  project,
+  approvedNarrative(project, ["distinctive_response", "response"]),
+  [project.reflection?.innovation, ...(project.designResponse || []).map(item => item.description)],
+)).join(" "), 70);
+const supportedLessons = (project: Project) => trimAtSentence(uniqueIntelligence(approvedRecordValue(
+  project,
+  approvedNarrative(project, ["precedent_relevance", "future_relevance"]),
+  [project.reflection?.lessonsLearned, ...(project.lessonsLearned || []), project.story.lessons],
+)).join(" "), 70);
+const collectionNarrative = (project: Project) => trimAtSentence(uniqueIntelligence([
+  ...approvedNarrative(project, ["project_summary", "project_narrative"]),
+  ...approvedDraft(project, "summary"),
+  projectSummary(project),
+]).join(" "), 120);
+const collectionRelevance = (project: Project, brief: string) => trimAtSentence(uniqueIntelligence([
+  ...approvedNarrative(project, ["future_relevance", "precedent_relevance", "outcome_future_relevance"]),
+  project.whyItMatters,
+  project.knowledge?.teamInput.futureRelevance,
+  brief ? `This approved precedent is included in response to the collection brief: ${brief}` : "",
+]).join(" "), 70);
 const wordCount = (value: string) => value.trim().split(/\s+/).filter(Boolean).length;
-const sentenceCount = (value: string) =>
-  (value.match(/[.!?](?:\s|$)/g) || []).length || (value.trim() ? 1 : 0);
 const eligibleProject = (project: Project, mode: StudioPackageMode) =>
   project.status !== "Archived" &&
   (mode === "internal" || project.confidentiality !== "internal-only");
@@ -379,6 +380,7 @@ export default function StudioV2() {
       <CollectionSetup
         projects={projects}
         collections={collections}
+        workspace={workspace}
         onBack={() => setFlow("home")}
         onCreated={created}
       />
@@ -530,17 +532,17 @@ function ProjectSheetSetup({
     [year, setYear] = useState(""),
     [service, setService] = useState(""),
     [status, setStatus] = useState(""),
-    [variant, setVariant] = useState<SheetVariant>("hero"),
+    [variant] = useState<SheetVariant>("hero"),
     [imageZoom,setImageZoom]=useState(1),
     [imageX,setImageX]=useState(50),
     [imageY,setImageY]=useState(50),
     [description,setDescription]=useState(""),
-    [keyFocus,setKeyFocus]=useState(""),
+    [innovation,setInnovation]=useState(""),
+    [lessons,setLessons]=useState(""),
     [manualEditing,setManualEditing]=useState(false),
-    [generationState,setGenerationState]=useState<"idle"|"all"|"description"|"focus">("idle"),
+    [generationState,setGenerationState]=useState<"idle"|"all"|"description"|"innovation">("idle"),
     [generationError,setGenerationError]=useState(""),
     [primary, setPrimary] = useState(""),
-    [support, setSupport] = useState<string[]>([]),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
   const options = (values: string[]) => [...new Set(values.filter(Boolean))].sort(),
@@ -562,7 +564,8 @@ function ProjectSheetSetup({
   }, [project, assets, primary]);
   useEffect(() => {
     setDescription("");
-    setKeyFocus("");
+    setInnovation("");
+    setLessons("");
     setManualEditing(false);
     setGenerationState("idle");
     setGenerationError("");
@@ -570,15 +573,16 @@ function ProjectSheetSetup({
     setImageX(50);
     setImageY(50);
   }, [projectId]);
-  const generateIntelligence = async (target:"all"|"description"|"focus") => {
+  const generateIntelligence = async (target:"all"|"description"|"innovation") => {
       if (!project) return;
       setGenerationState(target);
       setGenerationError("");
       setError("");
       try {
         await new Promise(resolve=>window.setTimeout(resolve,350));
-        if(target!=="focus")setDescription(generateProjectDescription(project));
-        if(target!=="description")setKeyFocus(generateKeyFocus(project));
+        if(target!=="innovation")setDescription(trimAtSentence(generateProjectDescription(project),180));
+        if(target!=="description")setInnovation(generatedInnovation(project));
+        if(target==="all")setLessons(supportedLessons(project));
         setManualEditing(true);
       } catch (reason) {
         const message=reason instanceof Error?reason.message:"Folion Intelligence could not generate this content.";
@@ -588,12 +592,14 @@ function ProjectSheetSetup({
       }
     },
     descriptionWords = wordCount(description),
-    focusSentences = sentenceCount(keyFocus),
-    contentTooLong = descriptionWords > 220 || focusSentences > 5,
+    innovationWords = wordCount(innovation),
+    lessonsWords = wordCount(lessons),
+    contentTooLong = descriptionWords > 180 || innovationWords > 70 || lessonsWords > 70,
     previewSections = project
       ? [
           section("project_description", "Project Description", description, 0, [source(project)]),
-          section("key_focus", "Key Focus", keyFocus, 1, [source(project)]),
+          section("innovation", "Innovation", innovation, 1, [source(project)]),
+          ...(lessons ? [section("lessons_learned", "Lessons Learned", lessons, 2, [source(project)])] : []),
         ]
       : [],
     previewPackage: StudioPackage | null = project
@@ -605,16 +611,17 @@ function ProjectSheetSetup({
           state: "draft",
           data: {
             template: "studio-v2-project-sheet",
-            variant,
+            variant: "hero",
             projectId: project.id,
             primaryAssetId: primary,
-            supportAssetIds: support,
             imageCrop: { zoom: imageZoom, x: imageX, y: imageY },
+            projectMeta: {name:project.projectName,location:project.location,year:project.year,typology:project.sector,client:project.client},
+            keyData: curatedProjectMetrics(project),
           },
           sections: previewSections,
           projectIds: [project.id],
           personIds: [],
-          assetIds: [primary, ...support].filter(Boolean),
+          assetIds: [primary].filter(Boolean),
           createdAt: "",
           updatedAt: "",
         }
@@ -622,13 +629,15 @@ function ProjectSheetSetup({
   const create = async () => {
     if (!session || !project)
       return setError("Select one existing project.");
-    if (!description.trim() || !keyFocus.trim())
-      return setError("Generate or enter both Project Description and Key Focus before saving.");
+    if (!primary)
+      return setError("Select one dominant hero image before saving.");
+    if (!description.trim() || !innovation.trim())
+      return setError("Generate or enter both Project Description and Innovation before saving.");
     if (contentTooLong)
       return setError("Trim the highlighted Project Sheet text before saving. The export is limited to one A4 page.");
     setSaving(true);
     try {
-      const facts = reviewedKnowledgeFacts(project),
+      const facts = curatedProjectMetrics(project),
         sections = [
           section(
             "project_description",
@@ -644,16 +653,8 @@ function ProjectSheetSetup({
             1,
             facts.map(() => source(project, "approved_project_fact")),
           ),
-          section(
-            "outcomes",
-            "Outcomes and relevance",
-            [project.story.outcome, project.whyItMatters]
-              .filter(Boolean)
-              .join("\n\n"),
-            2,
-            [source(project)],
-          ),
-          section("key_focus","Key Focus",keyFocus.trim(),3,[source(project, "approved_project_intelligence")]),
+          section("innovation","Innovation",innovation.trim(),2,[source(project, "approved_project_intelligence")]),
+          ...(lessons.trim() ? [section("lessons_learned","Lessons Learned",lessons.trim(),3,[source(project, "approved_project_intelligence")])] : []),
         ].map((item) => ({ ...item, status: "approved" as const }));
       const result = await apiRequest<{ package: StudioPackage }>(
         session,
@@ -667,17 +668,18 @@ function ProjectSheetSetup({
             state: "ready_to_share",
             data: {
               template: "studio-v2-project-sheet",
-              variant,
+              variant: "hero",
               projectId: project.id,
               primaryAssetId: primary,
-              supportAssetIds: support,
               imageCrop:{zoom:imageZoom,x:imageX,y:imageY},
+              projectMeta:{name:project.projectName,location:project.location,year:project.year,typology:project.sector,client:project.client},
+              keyData:facts,
               projectSheetTextApproved:true,
             },
             sections,
             projectIds: [project.id],
             personIds: [],
-            assetIds: [primary, ...support].filter(Boolean),
+            assetIds: [primary].filter(Boolean),
           }),
         },
       );
@@ -700,7 +702,6 @@ function ProjectSheetSetup({
           setMode(value);
           setProjectId("");
           setPrimary("");
-          setSupport([]);
         }}
       />
       <Field title="Choose an existing project">
@@ -726,27 +727,9 @@ function ProjectSheetSetup({
             onChange={() => {
               setProjectId(item.id);
               setPrimary("");
-              setSupport([]);
             }}
           />
         ))}
-      </Field>
-      <Field title="Page composition">
-        <div className="sv2-variant">
-          {(["hero", "plan", "collage"] as SheetVariant[]).map((value) => (
-            <button
-              className={variant === value ? "active" : ""}
-              onClick={() => setVariant(value)}
-              key={value}
-            >
-              {value === "hero"
-                ? "Hero-led"
-                : value === "plan"
-                  ? "Plan / map-led"
-                  : "Collage-led"}
-            </button>
-          ))}
-        </div>
       </Field>
       {project && (
         <Field title="Select visual material">
@@ -767,31 +750,6 @@ function ProjectSheetSetup({
               </label>
             ))}
           </div>
-          {variant === "collage" && (
-            <div className="sv2-support">
-              <p>Supporting images (up to two)</p>
-              {assets
-                .filter((asset) => asset.id !== primary)
-                .map((asset) => (
-                  <SelectRow
-                    key={asset.id}
-                    checked={support.includes(asset.id)}
-                    type="checkbox"
-                    title={asset.title || asset.fileName || asset.type}
-                    detail={asset.type}
-                    onChange={() =>
-                      setSupport((current) =>
-                        current.includes(asset.id)
-                          ? current.filter((id) => id !== asset.id)
-                          : current.length < 2
-                            ? [...current, asset.id]
-                            : current,
-                      )
-                    }
-                  />
-                ))}
-            </div>
-          )}
         </Field>
       )}
       {project && (
@@ -801,8 +759,8 @@ function ProjectSheetSetup({
             <Button disabled={generationState!=="idle"} variant="ghost" onClick={() => void generateIntelligence("description")}>
               {generationState==="description"?"Regenerating description…":"Regenerate Project Description"}
             </Button>
-            <Button disabled={generationState!=="idle"} variant="ghost" onClick={() => void generateIntelligence("focus")}>
-              {generationState==="focus"?"Regenerating Key Focus…":"Regenerate Key Focus"}
+            <Button disabled={generationState!=="idle"} variant="ghost" onClick={() => void generateIntelligence("innovation")}>
+              {generationState==="innovation"?"Regenerating Innovation…":"Regenerate Innovation"}
             </Button>
             <Button variant="ghost" onClick={() => setManualEditing(true)}>
               Edit manually
@@ -821,23 +779,24 @@ function ProjectSheetSetup({
                   onChange={(event) => setDescription(event.target.value)}
                   placeholder="Generate an editable description from approved project intelligence."
                 />
-                <small className={descriptionWords > 220 ? "sv2-warning" : ""}>
-                  {descriptionWords} words · target 150–220. A shorter restrained draft is allowed when approved information is limited.
+                <small className={descriptionWords > 180 ? "sv2-warning" : ""}>
+                  {descriptionWords} words · target 120–180. A shorter restrained draft is allowed when approved information is limited.
                 </small>
               </label>
-              <label className="label" htmlFor="project-sheet-key-focus">
-                Key Focus
+              <label className="label" htmlFor="project-sheet-innovation">
+                Innovation
                 <textarea
-                  id="project-sheet-key-focus"
-                  value={keyFocus}
+                  id="project-sheet-innovation"
+                  value={innovation}
                   readOnly={!manualEditing}
-                  onChange={(event) => setKeyFocus(event.target.value)}
-                  placeholder="Generate the distinctive challenge, contribution, approach and transferable insight."
+                  onChange={(event) => setInnovation(event.target.value)}
+                  placeholder="Generate innovation only from approved project knowledge."
                 />
-                <small className={focusSentences > 5 ? "sv2-warning" : ""}>
-                  {focusSentences} sentence{focusSentences === 1 ? "" : "s"} · maximum 5.
+                <small className={innovationWords > 70 ? "sv2-warning" : ""}>
+                  {innovationWords} words · target 40–70.
                 </small>
               </label>
+              <label className="label" htmlFor="project-sheet-lessons">Lessons Learned (only when supported)<textarea id="project-sheet-lessons" value={lessons} readOnly={!manualEditing} onChange={event=>setLessons(event.target.value)} placeholder="Left blank when approved sources or team input do not support lessons."/><small className={lessonsWords>70?"sv2-warning":""}>{lessonsWords} words · target 40–70 when supported. Never generated from inference.</small></label>
               <div className="sv2-crop-controls">
                 <label className="label">Zoom <output>{imageZoom.toFixed(2)}×</output><input aria-label="Hero image zoom" type="range" min="1" max="4" step="0.01" value={imageZoom} onChange={event=>setImageZoom(Number(event.target.value))}/></label>
                 <label className="label">Horizontal position <output>{imageX}%</output><input aria-label="Hero image horizontal position" type="range" min="0" max="100" step="1" value={imageX} onChange={event=>setImageX(Number(event.target.value))}/></label>
@@ -870,7 +829,7 @@ function ProjectSheetSetup({
       )}
       <button
         className="sv2-primary"
-        disabled={saving || !project || !description.trim() || !keyFocus.trim() || contentTooLong}
+        disabled={saving || !project || !description.trim() || !innovation.trim() || contentTooLong}
         onClick={create}
       >
         {saving ? "Saving…" : "Save approved Project Sheet text"}
@@ -882,11 +841,13 @@ function ProjectSheetSetup({
 function CollectionSetup({
   projects,
   collections,
+  workspace,
   onBack,
   onCreated,
 }: {
   projects: Project[];
   collections: Collection[];
+  workspace: ReturnType<typeof useStore>["workspace"];
   onBack: () => void;
   onCreated: (item: StudioPackage) => void;
 }) {
@@ -904,19 +865,19 @@ function CollectionSetup({
         .filter(
           (project) => project && eligibleProject(project, "internal"),
         ) as Project[]) || [];
-  useEffect(()=>{setIntroDraft(collection?.approvedNarrative||"")},[collectionId]);
+  useEffect(()=>{if(!collection)return setIntroDraft("");setIntroDraft(capabilityIntroduction(selected,collection.brief))},[collectionId]);
   const create = async () => {
     if (!session || !collection) return setError("Select a collection.");
     if (!collection.brief.trim())
       return setError(
         "Add a Collection Brief in Projects before creating a polished opening page.",
       );
-    if (!collection.approvedNarrative.trim())
-      return setError("Generate and approve the Collection Narrative in Projects before export.");
     if (!selected.length)
       return setError(
         "The collection needs at least one existing project.",
       );
+    if (!selected.flatMap(imageAssets).length)
+      return setError("The collection needs at least one approved image for its cover.");
     setSaving(true);
     try {
       const themes = [
@@ -924,7 +885,7 @@ function CollectionSetup({
             selected.flatMap((project) => project.services).filter(populated),
           ),
         ].slice(0, 3),
-        intro = introDraft.trim(),
+        intro = uniqueIntelligence([workspace?.firmProfile.firmStatement, introDraft.trim(), workspace?.firmProfile.servicesProvided.length ? `The firm's approved services include ${workspace.firmProfile.servicesProvided.join(', ')}.` : '']).join(' '),
         sections = [
           section(
             "capability_intro",
@@ -933,17 +894,13 @@ function CollectionSetup({
             0,
             selected.map((project) => source(project)),
           ),
-          ...selected.map((project, index) =>
-            section(
+          ...selected.map((project, index) => ({...section(
               "project_sheet",
               project.projectName,
-              [projectSummary(project), projectNarrative(project)]
-                .filter(Boolean)
-                .join("\n\n"),
+              collectionNarrative(project),
               index + 1,
               [source(project)],
-            ),
-          ),
+            ),manualContent:{projectId:project.id,imageAssetId:imageAssets(project)[0]?.id,meta:{name:project.projectName,location:project.location,year:project.year,typology:project.sector},keyData:curatedProjectMetrics(project).slice(0,3),relevance:collectionRelevance(project,collection.brief)}})),
         ],
         result = await apiRequest<{ package: StudioPackage }>(
           session,
@@ -959,6 +916,8 @@ function CollectionSetup({
                 template: "studio-v2-collection",
                 collectionId: collection.id,
                 collectionBrief: collection.brief,
+                collectionSubtitle: collection.description || collection.keywords,
+                coverAssetId: selected.flatMap(imageAssets)[0]?.id,
                 themes,
                 collectionFormat: format,
               },
@@ -1976,11 +1935,12 @@ function PackageWorkspace({
         (page) => page.scrollHeight > page.clientHeight + 2 || page.scrollWidth > page.clientWidth + 2,
       ),
       description = item.sections.find((value) => value.sectionType === "project_description")?.body || "",
-      keyFocus = item.sections.find((value) => value.sectionType === "key_focus")?.body || "";
+      innovation = item.sections.find((value) => value.sectionType === "innovation")?.body || "",
+      lessons = item.sections.find((value) => value.sectionType === "lessons_learned")?.body || "";
     if (
       overflowing ||
       (item.packageType === "single_project_sheet" &&
-        (pages.length !== 1 || wordCount(description) > 220 || sentenceCount(keyFocus) > 5))
+        (pages.length !== 1 || wordCount(description) > 180 || wordCount(innovation) > 70 || wordCount(lessons) > 70))
     ) {
       setExportError("Export stopped: this Project Sheet exceeds the safe one-page layout. Trim the approved text and save again.");
       return;
@@ -2033,66 +1993,6 @@ function PackageWorkspace({
   );
 }
 
-function ProjectSheetPage({
-  item,
-  project,
-}: {
-  item: StudioPackage;
-  project: Project;
-}) {
-  const primary =
-      project.assets.find((asset) => asset.id === item.data.primaryAssetId) ||
-      imageAssets(project)[0],
-    support = ((item.data.supportAssetIds as string[]) || [])
-      .map((id) => project.assets.find((asset) => asset.id === id))
-      .filter(Boolean) as Asset[],
-    variant = String(item.data.variant || "hero");
-  const facts = reviewedKnowledgeFacts(project).slice(0, 6),
-    summary =
-      item.sections.find((value) => value.sectionType === "project_summary")
-        ?.body || projectSummary(project),
-    narrative =
-      item.sections.find((value) => value.sectionType === "project_narrative")
-        ?.body || projectNarrative(project),
-    outcomes =
-      item.sections.find((value) => value.sectionType === "outcomes")?.body ||
-      [project.story.outcome, project.whyItMatters]
-        .filter(Boolean)
-        .join("\n\n");
-  return (
-    <article className={`sv2-page sv2-sheet ${variant}`}>
-      <Visual primary={primary} support={support} />
-      <section className="sv2-title">
-        <p>{project.sector}</p>
-        <h2>
-          {project.projectName}
-        </h2>
-      </section>
-      <section className="sv2-body">
-        <aside>
-          {facts.map((fact) => (
-            <div key={fact.key}>
-              <small>{fact.label}</small>
-              <strong>{fact.value}</strong>
-            </div>
-          ))}
-        </aside>
-        <div>
-          <h3>Project Description</h3>
-          <p>{summary}</p>
-          <p>{narrative}</p>
-        </div>
-        <div>
-          <h3>Outcomes + Relevance</h3>
-          <p>
-            {outcomes || "No approved outcome statement has been selected."}
-          </p>
-        </div>
-      </section>
-      <footer>Folion · Approved project knowledge</footer>
-    </article>
-  );
-}
 function Visual({ primary, support, crop }: { primary?: Asset; support: Asset[]; crop?:{zoom:number;x:number;y:number} }) {
   return (
     <div className="sv2-visual">
@@ -2128,63 +2028,23 @@ function CollectionPages({
   const ordered = item.projectIds
       .map((id) => projects.find((project) => project.id === id))
       .filter(Boolean) as Project[],
-    intro = [
-      workspace?.firmProfile.firmStatement,
-      item.sections.find(
+    intro = item.sections.find(
       (value) => value.sectionType === "capability_intro",
-      )?.body,
-    ].filter(populated).join("\n\n"),
-    themes = ((item.data.themes as string[]) || [])
-      .filter(populated)
-      .slice(0, 3),
-    hero = ordered.flatMap(imageAssets)[0],
+      )?.body || '',
+    subtitle=String(item.data.collectionSubtitle||''),
+    coverId=String(item.data.coverAssetId||''),
+    hero = ordered.flatMap(project=>project.assets).find(asset=>asset.id===coverId),
     format = String(item.data.collectionFormat || "expanded");
+  const cover=<article className={`sv2-page sv2-intro-page ${hero ? "has-image" : "text-led"}`}>{hero&&<div className="sv2-collection-image"><AssetImage asset={hero}/></div>}<div className="sv2-collection-copy"><CvBrand workspace={workspace} className="collection-cover-brand"/><p className="eyebrow">Project Collection</p><h2>{item.title}</h2>{subtitle&&<h3>{subtitle}</h3>}<h4>Firm Capability Statement</h4><p>{intro}</p><small>Generated with FOLION</small></div></article>;
   if (format === "card_grid") {
     const pages: Project[][] = [];
     for (let index = 0; index < ordered.length; index += 6) pages.push(ordered.slice(index, index + 6));
-    return <>{pages.map((projectsOnPage,pageIndex)=><article className="sv2-page sv2-card-grid" key={pageIndex}><header><p className="eyebrow">Project Collection</p><h2>{item.title}</h2>{pageIndex===0&&intro&&<p>{intro}</p>}</header><div>{projectsOnPage.map(project=>{const image=imageAssets(project)[0];return <article key={project.id}>{image&&<AssetImage asset={image}/>}<section><h3>{project.projectName}</h3>{populated(project.year)&&<p>{project.year}</p>}</section></article>})}</div></article>)}</>;
+    return <>{cover}{pages.map((projectsOnPage,pageIndex)=><article className="sv2-page sv2-card-grid" key={pageIndex}><header><p className="eyebrow">Project Collection</p><h2>{item.title}</h2></header><div>{projectsOnPage.map(project=>{const saved=item.sections.find(section=>section.sectionType==='project_sheet'&&section.manualContent?.projectId===project.id),image=project.assets.find(asset=>asset.id===saved?.manualContent?.imageAssetId),meta=(saved?.manualContent?.meta||{}) as Record<string,string>;return <article key={project.id}>{image&&<AssetImage asset={image}/>}<section><h3>{meta.name}</h3><p>{[meta.location,meta.year].filter(populated).join(' · ')}</p></section></article>})}</div></article>)}</>;
   }
   return (
     <>
-      <article
-        className={`sv2-page sv2-intro-page ${hero ? "has-image" : "text-led"}`}
-      >
-        {hero && (
-          <div className="sv2-collection-image">
-            <AssetImage asset={hero} />
-          </div>
-        )}
-        <div className="sv2-collection-copy">
-          <p className="eyebrow">Project Collection</p>
-          <h2>{item.title}</h2>
-          {intro && <p>{intro}</p>}
-          {themes.length > 0 && (
-            <div className="sv2-themes">
-              {themes.map((theme, index) => (
-                <div key={theme}>
-                  <span>0{index + 1}</span>
-                  <strong>{theme}</strong>
-                </div>
-              ))}
-            </div>
-          )}
-          <small>
-            {ordered.length} selected{" "}
-            {ordered.length === 1 ? "project" : "projects"}
-          </small>
-        </div>
-      </article>
-      {ordered.map((project) => (
-          <ProjectSheetPageNew
-          key={project.id}
-          item={{
-            ...item,
-            data: { ...item.data, primaryAssetId: imageAssets(project)[0]?.id },
-          }}
-          project={project}
-          workspace={workspace}
-        />
-      ))}
+      {cover}
+      {ordered.map(project=>{const saved=item.sections.find(section=>section.sectionType==='project_sheet'&&section.manualContent?.projectId===project.id),meta=(saved?.manualContent?.meta||{}) as Record<string,string>,image=project.assets.find(asset=>asset.id===saved?.manualContent?.imageAssetId),facts=(saved?.manualContent?.keyData||[]) as Array<{label:string;value:string}>,relevance=String(saved?.manualContent?.relevance||'');return <article className="sv2-page collection-expanded-page" key={project.id}>{image&&<div className="collection-expanded-hero"><AssetImage asset={image}/></div>}<main><p className="eyebrow">{[meta.location,meta.year,meta.typology].filter(populated).join(' · ')}</p><h2>{meta.name}</h2><div className="collection-expanded-content"><section><h3>Project Narrative</h3><p>{saved?.body}</p></section><aside>{facts.map(fact=><div key={fact.label}><small>{fact.label}</small><strong>{fact.value}</strong></div>)}</aside></div><section className="collection-relevance"><h3>Collection Relevance</h3><p>{relevance}</p></section><small className="collection-generated">Generated with FOLION</small></main></article>})}
     </>
   );
 }
@@ -2524,109 +2384,31 @@ function ProjectSheetPageNew({
   const primary =
       project.assets.find((asset) => asset.id === item.data.primaryAssetId) ||
       imageAssets(project)[0],
-    support = ((item.data.supportAssetIds as string[]) || [])
-      .map((id) => project.assets.find((asset) => asset.id === id))
-      .filter(Boolean) as Asset[],
-    variant = String(item.data.variant || "hero"),
-    facts = [
-      { label: "Client", value: project.client },
-      { label: "Location", value: project.location },
-      { label: "Year", value: project.year },
-      {
-        label: "Services",
-        value: project.services.join("; "),
-      },
-      { label: "Role", value: project.identity?.role?.join(", ") },
-      { label: "Site area", value: project.siteArea },
-      { label: "GFA", value: project.gfa },
-      { label: "Height", value: project.height },
-    ].filter((fact) => populated(fact.value)),
-    approvedDescription = item.sections.find(
-      (value) => value.sectionType === "project_description",
-    )?.body,
-    summary =
-      item.sections.find((value) => value.sectionType === "project_summary")
-        ?.body || projectSummary(project),
-    narrative =
-      item.sections.find((value) => value.sectionType === "project_narrative")
-        ?.body || projectNarrative(project),
-    outcomesText =
-      item.sections.find((value) => value.sectionType === "outcomes")?.body ||
-      [project.story.outcome, project.whyItMatters]
-        .filter(populated)
-        .join("\n\n"),
-    outcomes = outcomesText.split(/\n\s*\n/).filter(populated),
-    compactFacts = facts.length < 4,
-    sparseOutcomes = outcomes.length < 3,
+    meta = (item.data.projectMeta || {}) as Record<string,string>,
+    facts = ((item.data.keyData || []) as Array<{label:string;value:string}>).slice(0,4),
+    description = item.sections.find(value=>value.sectionType==='project_description')?.body || '',
+    innovation = item.sections.find(value=>value.sectionType==='innovation')?.body || '',
+    lessons = item.sections.find(value=>value.sectionType==='lessons_learned')?.body || '',
     crop=(item.data.imageCrop as {zoom:number;x:number;y:number}|undefined),
-    keyFocus=item.sections.find(value=>value.sectionType==='key_focus')?.body||'';
+    firmName=workspace?.firmProfile.firmName||workspace?.name||'';
   return (
-    <article
-      className={`sv2-page sv2-sheet ${variant} ${compactFacts ? "compact-facts" : ""} ${sparseOutcomes ? "sparse-outcomes" : ""} ${primary ? "" : "text-led"}`}
-    >
-      {primary ? (
-        <Visual primary={primary} support={support} crop={crop} />
-      ) : (
-        <section className="sv2-text-lead">
-          <p className="eyebrow">{project.sector || "Project"}</p>
-          <p>{approvedDescription || summary || narrative}</p>
-        </section>
-      )}
+    <article className="sv2-page sv2-sheet project-sheet-golden">
+      <Visual primary={primary} support={[]} crop={crop} />
       <section className="sv2-title">
-        {project.sector && <p>{project.sector}</p>}
-        <h2>
-          {project.projectName}
-        </h2>
-        {workspace?.firmProfile.servicesProvided.length ? (
-          <div className="sv2-meta-line">
-            {workspace.firmProfile.servicesProvided.slice(0, 4).map((service) => (
-              <span key={service}>{service}</span>
-            ))}
-          </div>
-        ) : null}
-        {compactFacts && (
-          <div className="sv2-meta-line">
-            {facts.map((fact) => (
-              <span key={fact.label}>
-                <small>{fact.label}</small>
-                {fact.value}
-              </span>
-            ))}
-          </div>
-        )}
+        <p>{[meta.location,meta.year,meta.typology].filter(populated).join(' · ')}</p>
+        <h2>{meta.name || item.title}</h2>
+        {populated(meta.client)&&<small>Client · {meta.client}</small>}
       </section>
       <section className="sv2-body">
-        {!compactFacts && (
-          <aside>
-            {facts.map((fact) => (
-              <div key={fact.label}>
-                <small>{fact.label}</small>
-                <strong>{fact.value}</strong>
-              </div>
-            ))}
-          </aside>
-        )}
+        <aside>{facts.map(fact=><div key={fact.label}><small>{fact.label}</small><strong>{fact.value}</strong></div>)}</aside>
         <div className="sv2-description">
           <h3>Project Description</h3>
-          {approvedDescription ? (
-            <p>{approvedDescription}</p>
-          ) : (
-            <>
-              {summary && <p>{summary}</p>}
-              {narrative && narrative !== summary && <p>{narrative}</p>}
-            </>
-          )}
+          <p>{description}</p>
         </div>
-        <div className="sv2-key-focus"><h3>Key Focus</h3>{keyFocus&&<p>{keyFocus}</p>}</div>
-        {outcomes.length > 0 && (
-          <div className="sv2-outcomes">
-            <h3>Key Project Outcomes</h3>
-            {outcomes.map((value) => (
-              <p key={value}>{value}</p>
-            ))}
-          </div>
-        )}
+        <div className="sv2-innovation"><h3>Innovation</h3><p>{innovation}</p></div>
+        {lessons&&<div className="sv2-lessons"><h3>Lessons Learned</h3><p>{lessons}</p></div>}
       </section>
+      <footer><span>{firmName}</span><small>Generated with FOLION</small></footer>
     </article>
   );
 }
