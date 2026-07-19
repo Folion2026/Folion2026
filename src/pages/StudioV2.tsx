@@ -33,6 +33,15 @@ import {
 } from "../lib/pitch";
 import type { PitchIntelligence, PitchSlide } from "../lib/pitch";
 import {
+  normaliseTender,
+  rankPeopleForTenderRole,
+  rankTenderProjects,
+  suggestedTenderRoles,
+  tenderFields,
+  type TenderIntelligence,
+  type TenderRole,
+} from "../lib/tender";
+import {
   approvedDraftSections,
   reviewedKnowledgeFacts,
 } from "../lib/project";
@@ -267,35 +276,6 @@ const capabilityIntroduction = (projects: Project[], purpose: string) => {
     .filter(Boolean)
     .join(" ");
 };
-const sampleTender = {
-  tender_title: "Regional Places and Precinct Strategy",
-  client: "Sample public-sector client",
-  client_needs:
-    "A clear place-led strategy supported by relevant precinct planning and engagement experience.",
-  evaluation_criteria: [
-    "Demonstrated place and precinct strategy experience",
-    "Evidence of stakeholder and community engagement",
-    "A credible approach to public-domain outcomes",
-  ],
-  mandatory_requirements: [
-    "Nominate relevant project precedents",
-    "Identify the proposed team and their explicit roles",
-  ],
-  capability_to_prove: [
-    "Place strategy",
-    "Urban design",
-    "Stakeholder engagement",
-  ],
-  key_decision_factors: [
-    "Direct relevance of precedents",
-    "Clarity of individual experience",
-    "Evidence-backed public benefit",
-  ],
-  team_evidence_required: ["Explicit project role", "Approved contribution"],
-  evidence_gaps: [
-    "No evidence should be claimed for qualifications or mandatory criteria not recorded in Folion.",
-  ],
-};
 const missingValue =
   /^(location not recorded|year not recorded|not available|uncategorised|unknown|n\/a)$/i;
 const populated = (value: unknown) =>
@@ -360,6 +340,7 @@ export default function StudioV2() {
     return (
       <PackageWorkspace
         item={active}
+        packages={packages}
         projects={projects}
         people={people}
         workspace={workspace}
@@ -1900,12 +1881,14 @@ function PlaceholderSetup({
 
 function PackageWorkspace({
   item,
+  packages,
   projects,
   people,
   workspace,
   onBack,
 }: {
   item: StudioPackage;
+  packages: StudioPackage[];
   projects: Project[];
   people: Person[];
   workspace: ReturnType<typeof useStore>['workspace'];
@@ -1915,9 +1898,12 @@ function PackageWorkspace({
   const pagesRef = useRef<HTMLElement>(null),
     [exporting, setExporting] = useState(false),
     [exportError, setExportError] = useState(""),
-    canExport = true;
+    [tenderExportMissing, setTenderExportMissing] = useState<string[]>(
+      item.packageType === "tender" ? ["Tender Intelligence workflow status is loading"] : [],
+    ),
+    canExport = item.packageType !== "tender" || tenderExportMissing.length === 0;
   const download = async () => {
-    if (!pagesRef.current) return;
+    if (!pagesRef.current || !canExport) return;
     if (item.packageType === "pitch") {
       setExportError("");
       setExporting(true);
@@ -1966,12 +1952,11 @@ function PackageWorkspace({
         </div>
         <div className="sv2-workspace-actions">
           <span>Saved · {new Date(item.updatedAt).toLocaleString()}</span>
-          {canExport ? (
-            <button className="sv2-primary" disabled={exporting} onClick={() => void download()}>
-              <FileDown size={16} /> {exporting ? "Preparing PDF…" : item.packageType === "pitch" ? "Export Pitch PDF" : "Export PDF"}
-            </button>
-          ) : (
-            <button disabled>Preview only — export coming next</button>
+          <button className="sv2-primary" disabled={exporting || !canExport} onClick={() => void download()}>
+            <FileDown size={16} /> {exporting ? "Preparing PDF…" : item.packageType === "pitch" ? "Export Pitch PDF" : "Export PDF"}
+          </button>
+          {item.packageType === "tender" && tenderExportMissing.length > 0 && (
+            <small className="sv2-warning">Tender PDF unavailable: {tenderExportMissing.join("; ")}.</small>
           )}
           {exportError && <small className="sv2-warning">{exportError}</small>}
         </div>
@@ -1986,7 +1971,7 @@ function PackageWorkspace({
         ) : item.packageType === "cv" ? (
           <CvPagesNew item={item} projects={projects} people={people} workspace={workspace} />
         ) : (
-          <TenderPagesNew item={item} projects={projects} people={people} workspace={workspace} />
+          <TenderWorkflow item={item} packages={packages} projects={projects} people={people} workspace={workspace} onExportStateChange={setTenderExportMissing} />
         )}
       </main>
     </div>
@@ -2405,8 +2390,8 @@ function ProjectSheetPageNew({
           <h3>Project Description</h3>
           <p>{description}</p>
         </div>
-        <div className="sv2-innovation"><h3>Innovation</h3><p>{innovation}</p></div>
-        {lessons&&<div className="sv2-lessons"><h3>Lessons Learned</h3><p>{lessons}</p></div>}
+        {innovation.trim() && <div className="sv2-innovation"><h3>Innovation</h3><p>{innovation}</p></div>}
+        {lessons.trim() && <div className="sv2-lessons"><h3>Lessons Learned</h3><p>{lessons}</p></div>}
       </section>
       <footer><span>{firmName}</span><small>Generated with FOLION</small></footer>
     </article>
@@ -2602,33 +2587,19 @@ function TenderSetupNew({
     { workspace } = useStore();
   const [mode, setMode] = useState<StudioPackageMode>("internal"),
     [file, setFile] = useState<File | null>(null),
-    [fixture, setFixture] = useState(false),
     [pasteMode, setPasteMode] = useState(false),
     [pastedText, setPastedText] = useState(""),
-    [count, setCount] = useState(3),
-    [projectIds, setProjectIds] = useState<string[]>([]),
-    [personIds, setPersonIds] = useState<string[]>([]),
     [saving, setSaving] = useState(false),
-    [error, setError] = useState(""),
-    eligible = projects.filter((project) => eligibleProject(project, mode)),
-    toggle = (
-      id: string,
-      setter: React.Dispatch<React.SetStateAction<string[]>>,
-    ) =>
-      setter((current) =>
-        current.includes(id)
-          ? current.filter((value) => value !== id)
-          : [...current, id],
-      );
+    [error, setError] = useState("");
   const create = async () => {
     if (!session || !workspace || !supabase)
       return setError("A workspace session is required.");
-    if (!fixture && !pasteMode && !file)
+    if (!pasteMode && !file)
       return setError(
-        "Upload a Tender Brief in PDF or DOCX format, or use the controlled sample tender.",
+        "Upload a Tender Brief in PDF or DOCX format, or paste its text.",
       );
     if (
-      !fixture && !pasteMode &&
+      !pasteMode &&
       file &&
       !(
         (file.type === "application/pdf" && /\.pdf$/i.test(file.name)) ||
@@ -2642,19 +2613,15 @@ function TenderSetupNew({
       );
     setSaving(true);
     try {
-      const selected = projectIds.slice(0, count),
-        title = fixture
-          ? sampleTender.tender_title
-          : pasteMode
+      const selected: string[] = [],
+        title = pasteMode
             ? "Pasted Tender Brief"
             : file!.name.replace(/\.(pdf|docx)$/i, ""),
         sections = [
           section(
             "tender_understanding",
             "Tender understanding",
-            fixture
-              ? sampleTender.client_needs
-              : "Analysis is being prepared from the uploaded tender.",
+            "Analysis is being prepared from the uploaded tender.",
             0,
             [],
           ),
@@ -2681,20 +2648,17 @@ function TenderSetupNew({
               state: "draft",
               data: {
                 template: "studio-v2-tender",
-                projectCount: count,
-                tenderSourceName: fixture
-                  ? "Controlled sample tender"
-                  : pasteMode ? "Pasted Tender Brief" : file!.name,
-                tenderFixture: fixture ? sampleTender : null,
+                projectCount: 5,
+                tenderSourceName: pasteMode ? "Pasted Tender Brief" : file!.name,
               },
               sections,
               projectIds: selected,
-              personIds,
+              personIds: [],
               assetIds: [],
             }),
           },
         );
-      if (file && !fixture) {
+      if (file) {
         const signed = await apiRequest<{
             sourceId: string;
             storagePath: string;
@@ -2728,7 +2692,7 @@ function TenderSetupNew({
           },
         );
       }
-      if (pasteMode && !fixture) {
+      if (pasteMode) {
         await apiRequest(
           session,
           `/v1/packages/${encodeURIComponent(result.package.id)}/tender-source`,
@@ -2752,32 +2716,19 @@ function TenderSetupNew({
         value={mode}
         onChange={(value) => {
           setMode(value);
-          setProjectIds([]);
         }}
       />
       <div className="sv2-source-choice">
         <label>
-          <input
-            type="radio"
-            checked={!fixture && !pasteMode}
-            onChange={() => { setFixture(false); setPasteMode(false); }}
-          />
+          <input type="radio" checked={!pasteMode} onChange={() => setPasteMode(false)} />
           Upload Tender Brief
         </label>
         <label>
-          <input type="radio" checked={pasteMode} onChange={() => { setFixture(false); setPasteMode(true); setFile(null); }} />
+          <input type="radio" checked={pasteMode} onChange={() => { setPasteMode(true); setFile(null); }} />
           Paste Tender Brief text
         </label>
-        <label>
-          <input
-            type="radio"
-            checked={fixture}
-            onChange={() => { setFixture(true); setPasteMode(false); setFile(null); }}
-          />
-          Use controlled sample tender
-        </label>
       </div>
-      {!fixture && !pasteMode && (
+      {!pasteMode && (
         <label className="label">
           Upload Tender Brief
           <input
@@ -2795,55 +2746,7 @@ function TenderSetupNew({
         </label>
       )}
       {pasteMode && <label className="label">Paste Tender Brief<textarea value={pastedText} onChange={(event) => setPastedText(event.target.value)} placeholder="Paste the tender scope, evaluation criteria and requirements"/><small>Folion analyses only the text supplied here.</small></label>}
-      {fixture && (
-        <div className="sv2-fixture">
-          <strong>{sampleTender.tender_title}</strong>
-          <p>{sampleTender.client_needs}</p>
-        </div>
-      )}
-      <label className="label">
-        Number of project precedents
-        <input
-          type="number"
-          min="1"
-          max="12"
-          value={count}
-          onChange={(event) => setCount(Number(event.target.value))}
-        />
-      </label>
-      <Field title="Approved projects">
-        {eligible.map((project) => (
-          <SelectRow
-            key={project.id}
-            checked={projectIds.includes(project.id)}
-            type="checkbox"
-            title={project.projectName}
-            detail={`${project.sector} · ${project.location}`}
-            onChange={() => toggle(project.id, setProjectIds)}
-          />
-        ))}
-      </Field>
-      <Field title="People with relevant recorded experience">
-        {people
-          .filter((person) =>
-            projects.some((project) =>
-              project.team.some(
-                (member) =>
-                  member.personId === person.id && member.projectRole.trim(),
-              ),
-            ),
-          )
-          .map((person) => (
-            <SelectRow
-              key={person.id}
-              checked={personIds.includes(person.id)}
-              type="checkbox"
-              title={person.name}
-              detail={person.position}
-              onChange={() => toggle(person.id, setPersonIds)}
-            />
-          ))}
-      </Field>
+      <p className="sv2-fixture">Projects, roles and people are selected only after you review the extracted Tender Intelligence.</p>
       <button
         className="sv2-primary"
         disabled={saving || (pasteMode && !pastedText.trim())}
@@ -2867,7 +2770,7 @@ function TenderPagesNew({
   workspace: ReturnType<typeof useStore>['workspace'];
 }) {
   const { session } = useAuth(),
-    fixture = item.data.tenderFixture as typeof sampleTender | null,
+    fixture = null,
     [job, setJob] = useState<{
       status: string;
       analysis?: Record<string, unknown>;
@@ -3040,6 +2943,127 @@ function TenderPagesNew({
       {criteria.length>0&&selected.map(project=><ProjectSheetPageNew key={project.id} item={{...item,data:{...item.data,primaryAssetId:imageAssets(project)[0]?.id}}} project={project} workspace={workspace}/>)}
     </div>
   );
+}
+
+type TenderWorkflowState = {
+  intelligence?: TenderIntelligence;
+  intelligenceReviewed?: boolean;
+  capability?: string;
+  projectIds?: string[];
+  projectsConfirmed?: boolean;
+  roles?: TenderRole[];
+  teamConfirmed?: boolean;
+  packageConfirmed?: boolean;
+};
+const approvedProjectSheetFor = (projectId: string, packages: StudioPackage[]) =>
+  packages
+    .filter(value =>
+      value.packageType === "single_project_sheet" &&
+      value.state === "ready_to_share" &&
+      value.projectIds.length === 1 &&
+      value.projectIds[0] === projectId &&
+      value.data.projectSheetTextApproved === true,
+    )
+    .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))[0];
+const tenderFieldLabel = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, letter => letter.toUpperCase());
+function TenderWorkflow({ item, packages, projects, people, workspace, onExportStateChange }: { item: StudioPackage; packages: StudioPackage[]; projects: Project[]; people: Person[]; workspace: ReturnType<typeof useStore>["workspace"]; onExportStateChange: (missing: string[]) => void }) {
+  const { session } = useAuth();
+  const stored = (item.data.tenderWorkflow || {}) as TenderWorkflowState;
+  const [job, setJob] = useState<{ status: string; analysis?: Record<string, unknown>; failure_reason?: string } | null>(null);
+  const [intelligence, setIntelligence] = useState<TenderIntelligence | null>(stored.intelligence || null);
+  const [reviewed, setReviewed] = useState(Boolean(stored.intelligenceReviewed));
+  const [capability, setCapability] = useState(stored.capability || "");
+  const [projectIds, setProjectIds] = useState<string[]>(stored.projectIds || []);
+  const [projectsConfirmed, setProjectsConfirmed] = useState(Boolean(stored.projectsConfirmed));
+  const [roles, setRoles] = useState<TenderRole[]>(stored.roles || []);
+  const [teamConfirmed, setTeamConfirmed] = useState(Boolean(stored.teamConfirmed));
+  const [packageConfirmed, setPackageConfirmed] = useState(Boolean(stored.packageConfirmed));
+  const [saving, setSaving] = useState(false), [message, setMessage] = useState("");
+  useEffect(() => {
+    if (!session || intelligence) return;
+    let stopped = false, timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const result = await apiRequest<{ job: typeof job }>(session, `/v1/packages/${encodeURIComponent(item.id)}/tender-analysis`);
+        if (stopped) return;
+        setJob(result.job);
+        if (result.job?.status === "ready_for_review" && result.job.analysis) setIntelligence(normaliseTender(result.job.analysis));
+        else if (result.job && ["queued", "extracting_text", "analysing"].includes(result.job.status)) timer = setTimeout(poll, 2500);
+      } catch (reason) { if (!stopped) setMessage(reason instanceof Error ? reason.message : "Tender analysis could not be loaded."); }
+    };
+    void poll(); return () => { stopped = true; clearTimeout(timer); };
+  }, [session, item.id, intelligence]);
+  const ranked = useMemo(() => intelligence ? rankTenderProjects(intelligence, projects, item.mode) : [], [intelligence, projects, item.mode]);
+  const selected = projectIds.map(id => projects.find(project => project.id === id)).filter((project): project is Project => Boolean(project));
+  const selectedProjectSheets = selected.map(project => ({
+    project,
+    sheet: approvedProjectSheetFor(project.id, packages),
+  }));
+  const save = async (changes: Partial<TenderWorkflowState> = {}) => {
+    if (!session) return;
+    setSaving(true); setMessage("");
+    const workflow: TenderWorkflowState = { intelligence: intelligence || undefined, intelligenceReviewed: reviewed, capability, projectIds, projectsConfirmed, roles, teamConfirmed, packageConfirmed, ...changes };
+    try {
+      await apiRequest(session, `/v1/packages/${encodeURIComponent(item.id)}`, { method: "PUT", body: JSON.stringify({ ...item, data: { ...item.data, tenderWorkflow: workflow }, projectIds: workflow.projectIds || [], personIds: (workflow.roles || []).map(role => role.personId).filter(Boolean) }) });
+      setMessage("Tender workflow saved.");
+    } catch (reason) { setMessage(reason instanceof Error ? reason.message : "Tender workflow could not be saved."); }
+    finally { setSaving(false); }
+  };
+  const confirmIntelligence = () => {
+    if (!intelligence) return;
+    const ids = (projectIds.length ? projectIds : ranked.slice(0, 5).map(row => row.project.id)).slice(0, 5);
+    const nextRoles = roles.length ? roles : suggestedTenderRoles(intelligence);
+    setReviewed(true); setProjectIds(ids); setRoles(nextRoles);
+    void save({ intelligenceReviewed: true, projectIds: ids, roles: nextRoles });
+  };
+  const generateCapability = () => {
+    if (!intelligence || !workspace) return;
+    const requirements = [...intelligence.scope, ...intelligence.services, ...intelligence.required_experience].slice(0, 8).join(", ");
+    const projectEvidence = ranked.slice(0, 5).filter(row => row.score > 0).map(row => `${row.project.projectName} (${row.reasons[0]})`).join("; ");
+    const peopleEvidence = people.filter(person => person.status === "active" && person.skills.some(skill => requirements.toLowerCase().includes(skill.toLowerCase()))).slice(0, 4).map(person => `${person.name}, ${person.position}, with approved expertise in ${person.skills.slice(0, 3).join(", ")}`).join("; ");
+    const text = trimAtSentence([workspace.firmProfile.firmStatement, requirements ? `For ${intelligence.tender_title}, the tender identifies ${requirements}. Our response is grounded only in approved Folion evidence.` : "", workspace.firmProfile.servicesProvided.length ? `The approved firm record lists services in ${workspace.firmProfile.servicesProvided.join(", ")}.` : "", projectEvidence ? `Relevant approved project evidence includes ${projectEvidence}.` : "", peopleEvidence ? `Relevant approved people knowledge includes ${peopleEvidence}.` : "", `This capability statement is an evidence package for bid development. Any unmet requirement remains an evidence gap and is not presented as a firm claim.`].filter(Boolean).join(" "), 500);
+    setCapability(text); void save({ capability: text });
+  };
+  const replaceProject = (index: number, id: string) => { const next = [...projectIds]; next[index] = id; setProjectIds(next); setProjectsConfirmed(false); };
+  const moveProject = (index: number, direction: -1 | 1) => { const target = index + direction; if (target < 0 || target >= projectIds.length) return; const next = [...projectIds]; [next[index], next[target]] = [next[target], next[index]]; setProjectIds(next); setProjectsConfirmed(false); };
+  const updateRole = (id: string, change: Partial<TenderRole>) => { setRoles(current => current.map(role => role.id === id ? { ...role, ...change } : role)); setTeamConfirmed(false); };
+  const confirmedMembers = roles.filter(role => role.personId).map(role => ({ role, person: people.find(person => person.id === role.personId)! })).filter(value => value.person?.status === "active");
+  const fiveDistinctProjects = selected.length === 5 && projectIds.length === 5 && new Set(projectIds).size === 5;
+  const allProjectSheetsReady = fiveDistinctProjects && selectedProjectSheets.every(value => Boolean(value.sheet));
+  const ready = Boolean(intelligence) && reviewed && Boolean(capability.trim()) && projectsConfirmed && fiveDistinctProjects && allProjectSheetsReady && teamConfirmed;
+  const exportMissing = useMemo(() => [
+      !intelligence ? "Tender Intelligence analysis has not completed" : "",
+      !reviewed ? "Tender Intelligence review is not confirmed" : "",
+      !capability.trim() ? "Capability Statement has not been generated" : "",
+      !(projectsConfirmed && fiveDistinctProjects) ? "exactly five projects are not selected and confirmed" : "",
+      fiveDistinctProjects && !allProjectSheetsReady ? "one or more selected projects has no approved Project Sheet" : "",
+      !teamConfirmed ? "Team Structure is not confirmed" : "",
+      !packageConfirmed ? "final Tender Intelligence package is not confirmed" : "",
+    ].filter(Boolean), [intelligence, reviewed, capability, projectsConfirmed, fiveDistinctProjects, allProjectSheetsReady, teamConfirmed, packageConfirmed]);
+  useEffect(() => onExportStateChange(exportMissing), [onExportStateChange, exportMissing]);
+  if (!intelligence) return <section className="sv2-tender-review"><header><p className="eyebrow">Upload Tender → Analyse Tender</p><h2>{item.title}</h2><p>Folion is extracting supported tender intelligence.</p><span className="sv2-analysis-state">{job?.status?.replaceAll("_", " ") || "waiting for analysis"}</span>{job?.failure_reason && <p className="sv2-warning">{job.failure_reason}</p>}</header></section>;
+  return <div className="sv2-tender-review">
+    <header><p className="eyebrow">Review Tender Intelligence</p><h2>{intelligence.tender_title}</h2><p>Review and edit the extracted facts before Folion generates evidence outputs. Empty fields remain evidence gaps.</p>{message && <small>{message}</small>}</header>
+    <section className="sv2-tender-editor"><h3>01 · Tender analysis</h3>{tenderFields.map(field => <label className="label" key={field}>{tenderFieldLabel(field)}<textarea value={intelligence[field].join("\n")} disabled={reviewed} onChange={event => setIntelligence({ ...intelligence, [field]: event.target.value.split("\n").map(value => value.trim()).filter(Boolean) })}/></label>)}{intelligence.evidence_gaps.length > 0 && <div className="sv2-gap"><strong>Evidence gaps</strong><ul>{intelligence.evidence_gaps.map(gap => <li key={gap}>{gap}</li>)}</ul></div>}<button className="sv2-primary" disabled={reviewed || saving} onClick={confirmIntelligence}>{reviewed ? "Tender Intelligence reviewed" : "Confirm reviewed intelligence"}</button></section>
+    {reviewed && <section className="sv2-tender-editor"><h3>02 · Capability Statement</h3><p>Editable, tender-specific evidence only. Target: 250–500 words.</p><button onClick={generateCapability}>Generate Capability Statement</button><textarea value={capability} onChange={event => setCapability(event.target.value)} /><small>{wordCount(capability)} words</small><button disabled={!capability.trim() || saving} onClick={() => void save()}>Save Capability Statement</button></section>}
+    {reviewed && <section className="sv2-tender-shortlist"><h3>03 · Match and confirm five projects</h3>{projectIds.map((id, index) => { const project = projects.find(value => value.id === id); const result = ranked.find(value => value.project.id === id); return <article key={`${id}-${index}`}><strong>{index + 1}. {project?.projectName || "Select project"}</strong><p>{result?.reasons.join(" · ") || "Replacement selected from eligible approved project knowledge."}</p><div><button onClick={() => moveProject(index, -1)} disabled={index === 0}>Up</button><button onClick={() => moveProject(index, 1)} disabled={index === projectIds.length - 1}>Down</button><select value={id} onChange={event => replaceProject(index, event.target.value)}>{ranked.map(row => <option key={row.project.id} value={row.project.id}>{row.project.projectName}</option>)}</select></div></article>})}{projectIds.length < 5 && <p className="sv2-warning">Five eligible approved projects are required. Only {projectIds.length} are currently available.</p>}<button className="sv2-primary" disabled={projectIds.length !== 5 || new Set(projectIds).size !== 5} onClick={() => { setProjectsConfirmed(true); void save({ projectsConfirmed: true }); }}>{projectsConfirmed ? "Five projects confirmed" : "Confirm final five"}</button></section>}
+    {projectsConfirmed && <section className="sv2-team-builder"><h3>04 · Suggested Team Structure</h3>{roles.map(role => { const matches = rankPeopleForTenderRole(role, people, selected); return <article key={role.id}><input value={role.title} onChange={event => updateRole(role.id, { title: event.target.value })}/><small>{role.mandatory ? "Mandatory role" : "Desirable role"} · {role.requirement}</small><select value={role.personId} onChange={event => updateRole(role.id, { personId: event.target.value })}><option value="">Leave unfilled</option>{matches.map(match => <option key={match.person.id} value={match.person.id}>{match.person.name} · {match.person.position}</option>)}</select>{role.personId && <p>{matches.find(match => match.person.id === role.personId)?.reasons.join(" · ")}</p>}<button onClick={() => setRoles(current => current.filter(value => value.id !== role.id))}>Remove role</button></article>})}<button onClick={() => setRoles(current => [...current, { id: createUuid(), title: "New tender role", requirement: "User-added role", mandatory: false, personId: "" }])}>Add role</button><button className="sv2-primary" onClick={() => { setTeamConfirmed(true); void save({ teamConfirmed: true }); }}>{teamConfirmed ? "Team confirmed" : "Confirm team"}</button></section>}
+    {teamConfirmed && <section className="sv2-tender-editor"><h3>05 · Export Tender Intelligence Package</h3><p>Includes the Capability Statement, exactly five locked Project Sheets, confirmed Team Structure, and one-page Tender CVs. It does not include final tender assembly, methodology, fees, schedules, contractual forms, or graphical post-production.</p>{fiveDistinctProjects && !allProjectSheetsReady && <p className="sv2-warning">Approved Project Sheets are required for: {selectedProjectSheets.filter(value => !value.sheet).map(value => value.project.projectName).join(", ")}.</p>}<button className="sv2-primary" disabled={!ready} onClick={() => { setPackageConfirmed(true); void save({ packageConfirmed: true }); }}>Prepare export package</button></section>}
+    {packageConfirmed && ready && <>
+      <TenderCapabilityPage intelligence={intelligence} capability={capability} workspace={workspace}/>
+      {selectedProjectSheets.map(({ project, sheet }) => sheet && <ProjectSheetPageNew key={project.id} item={sheet} project={project} workspace={workspace}/>)}
+      <TenderTeamPage intelligence={intelligence} members={confirmedMembers} workspace={workspace}/>
+      {confirmedMembers.map(({ role, person }) => <TenderCvPage key={role.id} role={role} person={person} projects={selected} intelligence={intelligence} workspace={workspace}/>)}
+    </>}
+  </div>;
+}
+
+function TenderCapabilityPage({ intelligence, capability, workspace }: { intelligence: TenderIntelligence; capability: string; workspace: ReturnType<typeof useStore>["workspace"] }) { return <article className="sv2-page sv2-tender-output"><CvBrand workspace={workspace}/><p className="eyebrow">01 · Capability Statement</p><h2>{intelligence.tender_title}</h2><section><h3>{workspace?.firmProfile.firmName || workspace?.name}</h3><p>{capability}</p></section><small>Generated with FOLION · Evidence package, not a complete tender response</small></article>; }
+function TenderTeamPage({ intelligence, members, workspace }: { intelligence: TenderIntelligence; members: Array<{ role: TenderRole; person: Person }>; workspace: ReturnType<typeof useStore>["workspace"] }) { return <article className="sv2-page sv2-tender-output"><CvBrand workspace={workspace}/><p className="eyebrow">03 · Confirmed Team Structure</p><h2>{intelligence.tender_title}</h2><section>{members.map(({ role, person }) => <div key={role.id}><strong>{role.title}</strong><p>{person.name}<br/>{person.position}</p></div>)}</section></article>; }
+function TenderCvPage({ role, person, projects, intelligence, workspace }: { role: TenderRole; person: Person; projects: Project[]; intelligence: TenderIntelligence; workspace: ReturnType<typeof useStore>["workspace"] }) {
+  const matches = matchProjectsForCv(tenderFields.flatMap(field => intelligence[field]).join(" "), [person.id], projects, "internal").slice(0, 3);
+  const profile = createOpportunityProfile(person, `${role.title} ${role.requirement}`, matches);
+  return <article className="sv2-page cv-golden-page tender-cv-page"><header className="cv-golden-topbar"><CvBrand workspace={workspace} className="cv-golden-lockup"/><div>Tender CV · {intelligence.tender_title}</div></header><main className="tender-cv-content"><div className="cv-golden-identity"><div className="cv-golden-portrait">{personPortrait(person) ? <img src={personPortrait(person)} alt=""/> : <span>{person.name.split(/\s+/).map(value => value[0]).join("")}</span>}</div><div><p className="cv-golden-eyebrow">Proposed role · {role.title}</p><h2>{person.name}</h2><p>{person.position}</p></div></div><p className="cv-golden-lead">{profile}</p><div className="cv-golden-credentials"><article><span className="cv-golden-label">Expertise</span><p>{person.skills.slice(0, 6).join("\n") || "No approved expertise recorded"}</p></article><article><span className="cv-golden-label">Qualifications</span><p>{personQualifications(person).slice(0, 5).join("\n") || "No approved qualifications recorded"}</p></article><article><span className="cv-golden-label">Registrations / experience</span><p>{[...personRegistrations(person).slice(0, 4), personYears(person)].filter(Boolean).join("\n") || "No approved registration record"}</p></article></div><section className="tender-cv-projects"><span className="cv-golden-label">Strongest relevant project-role evidence</span>{matches.map(match => <article key={match.project.id}><h3>{match.project.projectName}</h3><strong>{match.member.projectRole}</strong><p>{createProjectContribution(person, match)}</p></article>)}{!matches.length && <p>Evidence gap: no explicit Person → Project → Role relationship exists for the selected projects.</p>}</section><CvFooter workspace={workspace}/></main></article>;
 }
 
 function Setup({
