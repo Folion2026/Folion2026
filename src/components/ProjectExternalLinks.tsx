@@ -1,0 +1,16 @@
+import {ExternalLink,FolderOpen,Plus,Trash2} from 'lucide-react'
+import {useState} from 'react'
+import {createStableId} from '../lib/id'
+import {ExternalLinkProvider,Project,ProjectExternalLink} from '../types'
+import {useStore} from '../store'
+import {Button} from './ui'
+const providers:ExternalLinkProvider[]=['SharePoint','OneDrive','Google Drive','Dropbox','Box','Other']
+export default function ProjectExternalLinks({project}:{project:Project}){
+ const {workspaceRole,saveProjectLinks}=useStore(),[editing,setEditing]=useState(false),[links,setLinks]=useState<ProjectExternalLink[]>(project.externalLinks||[]),[error,setError]=useState(''),[saving,setSaving]=useState(false),primary=(project.externalLinks||[]).find(link=>link.isPrimary)||(project.externalLinks||[])[0]
+ const update=(id:string,patch:Partial<ProjectExternalLink>)=>setLinks(current=>current.map(link=>link.id===id?{...link,...patch}:patch.isPrimary?{...link,isPrimary:false}:link))
+ const save=async()=>{setSaving(true);setError('');try{await saveProjectLinks(project.id,links);setEditing(false)}catch(reason){setError(reason instanceof Error?reason.message:'Unable to save links')}finally{setSaving(false)}}
+ return <section className="overview-fact-group"><div className="flex items-center justify-between gap-3"><h2><FolderOpen/> Project folders</h2>{workspaceRole!=='viewer'&&<Button variant="ghost" onClick={()=>{setLinks(project.externalLinks||[]);setEditing(value=>!value)}}>{editing?'Cancel':'Manage links'}</Button>}</div>{primary&&<a className="mt-4 inline-flex items-center gap-2 font-semibold underline" href={primary.url} target="_blank" rel="noreferrer">Open Project Folder <ExternalLink size={15}/></a>}
+  {!editing&&(project.externalLinks||[]).filter(link=>link.id!==primary?.id).map(link=><p className="mt-2" key={link.id}><a href={link.url} target="_blank" rel="noreferrer">{link.label} ↗</a> <small>· {link.provider}</small></p>)}
+  {editing&&<div className="space-y-3 mt-4">{links.map(link=><div className="grid md:grid-cols-[1fr_1.5fr_160px_auto_auto] gap-2 items-center" key={link.id}><input aria-label="Link label" value={link.label} onChange={event=>update(link.id,{label:event.target.value})}/><input aria-label="Link URL" type="url" value={link.url} onChange={event=>update(link.id,{url:event.target.value})}/><select value={link.provider} onChange={event=>update(link.id,{provider:event.target.value as ExternalLinkProvider})}>{providers.map(value=><option key={value}>{value}</option>)}</select><label className="text-sm"><input type="radio" name="primary-link" checked={link.isPrimary} onChange={()=>update(link.id,{isPrimary:true})}/> Primary</label><button aria-label="Remove link" onClick={()=>setLinks(current=>current.filter(item=>item.id!==link.id))}><Trash2 size={16}/></button></div>)}<div className="flex gap-2"><Button variant="ghost" onClick={()=>setLinks(current=>[...current,{id:createStableId('link'),projectId:project.id,label:'Project folder',url:'',provider:'Other',isPrimary:current.length===0}])}><Plus/> Add link</Button><Button disabled={saving||links.some(link=>!link.url.trim())} onClick={()=>void save()}>{saving?'Saving…':'Save links'}</Button></div>{error&&<p className="auth-message error">{error}</p>}</div>}
+ </section>
+}

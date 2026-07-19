@@ -10,14 +10,14 @@ import {useAuth} from '../auth'
 
 const nav=[
   ['/home','Home',Home],
-  ['/projects','Projects',FolderKanban],
+  ['/collections','Collections',FolderKanban],
   ['/studio-v2','Studio',Sparkles],
   ['/folion-id','Folion ID',IdCard],
 ] as const
 
 const routeTitles:Record<string,{eyebrow:string;title:string}>={
   '/home':{eyebrow:'Practice memory',title:'Home'},
-  '/projects':{eyebrow:'Practice Intelligence',title:'Project Deck'},
+  '/collections':{eyebrow:'Curated portfolios',title:'Collections'},
   '/new-project':{eyebrow:'Practice memory',title:'New project'},
   '/studio-v2':{eyebrow:'Create from memory',title:'Studio'},
   '/folion-id':{eyebrow:'Practice profile',title:'Folion ID'},
@@ -42,7 +42,7 @@ export function Sidebar({open,onClose}:{open:boolean;onClose:()=>void}){
       <div className="mt-8">
         <div className="flex items-center justify-between px-3">
           <p className="sidebar-label">Collections</p>
-          <NavLink to="/projects" onClick={onClose} className="text-black/35 hover:text-ink" aria-label="View collections"><Plus size={15}/></NavLink>
+          <NavLink to="/collections" onClick={onClose} className="text-black/35 hover:text-ink" aria-label="View collections"><Plus size={15}/></NavLink>
         </div>
         <div className="mt-2 space-y-0.5">{collections.slice(0,3).map(collection=><NavLink key={collection.id} to={`/collections/${collection.id}`} onClick={onClose} className={({isActive})=>`collection-link ${isActive?'active':''}`}><span className="h-2 w-2 rounded-sm bg-current opacity-45"/>{collection.name}<span className="ml-auto text-[11px] opacity-40">{collection.projectIds.filter(id=>safeProjects.some(project=>project.id===id)).length}</span></NavLink>)}</div>
       </div>
@@ -66,7 +66,7 @@ export function TopBar({onMenu,onSearch}:{onMenu:()=>void;onSearch:()=>void}){
     <div className="min-w-0"><div className="topbar-eyebrow">{meta.eyebrow}</div><div className="font-medium truncate">{meta.title}</div></div>
     <div className="ml-auto flex items-center gap-2">
       <button onClick={onSearch} className="global-search" aria-label="Search and navigate"><Search size={17}/><span className="hidden md:inline">Search memory</span><kbd className="hidden xl:inline">⌘ K</kbd></button>
-      <NavLink to="/new-project"><Button className="!px-4"><Plus size={17}/><span className="hidden sm:inline">New project</span></Button></NavLink>
+      <NavLink to="/new-project"><Button className="!px-4"><Plus size={17}/><span className="hidden sm:inline">Create New Project</span></Button></NavLink>
     </div>
   </header>
 }

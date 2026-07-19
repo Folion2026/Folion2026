@@ -731,6 +731,14 @@ async function processJob(job: Job) {
     }
   }
   let narrativeCount = 0;
+  const { error: extractedLifecycleError } = await admin
+    .from("assets")
+    .update({ lifecycle_status: "extracted" })
+    .eq("workspace_id", job.workspace_id)
+    .eq("project_id", job.project_id)
+    .eq("id", job.source_asset_id)
+    .eq("retention_kind", "temporary_source");
+  if (extractedLifecycleError) throw extractedLifecycleError;
   try {
     narrativeCount = await synthesize(job, true);
   } catch (error) {
@@ -751,6 +759,14 @@ async function processJob(job: Job) {
       model_name: geminiModel,
     })
     .eq("id", job.id);
+  const { error: reviewLifecycleError } = await admin
+    .from("assets")
+    .update({ lifecycle_status: "pending_review" })
+    .eq("workspace_id", job.workspace_id)
+    .eq("project_id", job.project_id)
+    .eq("id", job.source_asset_id)
+    .eq("retention_kind", "temporary_source");
+  if (reviewLifecycleError) throw reviewLifecycleError;
   await audit(job, "document.analysis_completed", {
     candidateCount: grouped.size,
     createdCandidateCount: created,

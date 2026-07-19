@@ -7,6 +7,7 @@ import {ProjectHero,ProjectOverview} from '../components/ProjectDetailSections'
 import {Button,EmptyState} from '../components/ui'
 import {normalizeProject} from '../lib/project'
 import {useStore} from '../store'
+import ProjectExternalLinks from '../components/ProjectExternalLinks'
 
 type DetailTab='overview'|'knowledge'|'sources'
 export default function ProjectDetail(){
@@ -16,10 +17,10 @@ export default function ProjectDetail(){
  if(!project)return <EmptyState title="Project not found" body="This project may have moved or been archived."/>
  const changeTab=(tab:DetailTab)=>setSearchParams(tab==='overview'?{}:{tab})
  return <div className="project-record">
- <div className="detail-toolbar"><button onClick={()=>navigate(-1)} className="detail-back"><ArrowLeft size={16}/> Back to projects</button></div>
+ <div className="detail-toolbar"><button onClick={()=>navigate('/home')} className="detail-back"><ArrowLeft size={16}/> Back to Project Gallery</button></div>
   <nav className="detail-tabs" aria-label="Project detail sections">{(['overview','knowledge','sources'] as DetailTab[]).map(tab=><button key={tab} className={activeTab===tab?'active':''} onClick={()=>changeTab(tab)}>{tab[0].toUpperCase()+tab.slice(1)}</button>)}</nav>
   {showReadyConfirmation&&<aside className="project-ready-confirmation" aria-live="polite"><CheckCircle2/><div><p className="eyebrow">Editorial release</p><h2>Project ready for Studio</h2><p>Approved knowledge is ready for deliberate Studio use. This does not publish the project.</p></div><div><Button onClick={()=>navigate('/studio')}>Open Studio <ArrowRight/></Button><button onClick={()=>{setShowReadyConfirmation(false);navigate(`/projects/${project.id}`,{replace:true})}}>View project</button></div></aside>}
-  {activeTab==='overview'&&<>{project.knowledgeStatus==='Ready for Studio'&&<p className="project-ready-status"><CheckCircle2/> Ready for Studio</p>}<ProjectHero project={project}/><ProjectOverview project={project}/></>}
+  {activeTab==='overview'&&<>{project.knowledgeStatus==='Ready for Studio'&&<p className="project-ready-status"><CheckCircle2/> Ready for Studio</p>}<ProjectHero project={project}/><ProjectExternalLinks project={project}/><ProjectOverview project={project}/></>}
   {activeTab==='knowledge'&&<KnowledgeModelSections project={project}/>}
   {activeTab==='sources'&&<ProjectKnowledgeRecord project={project} onUpdate={updateProject}/>}
  </div>

@@ -4,7 +4,7 @@ import {useNavigate} from 'react-router-dom'
 import {useStore} from '../store'
 
 const destinations=[
-  {label:'Home',hint:'Project of the day',to:'/home',icon:Home},
+  {label:'Home',hint:'Project Gallery',to:'/home',icon:Home},
   {label:'Projects',hint:'Search practice memory',to:'/projects',icon:FolderKanban},
   {label:'Studio',hint:'Create a new output',to:'/studio-v2',icon:Sparkles},
   {label:'Folion ID',hint:'Practice and people',to:'/folion-id',icon:IdCard},

@@ -35,7 +35,7 @@ export default function ProjectKnowledgeRecord({project,onUpdate}:{project:Proje
  const markReady=()=>onUpdate({...safe,knowledgeStatus:'Ready for Studio'})
  const reopenReview=()=>onUpdate({...safe,knowledgeStatus:'Review needed'})
  const keepReviewing=()=>document.querySelector<HTMLElement>('.knowledge-review-section')?.scrollIntoView({behavior:'smooth',block:'start'})
- const confirmDelete=async()=>{setDeleting(true);setDeleteError('');try{await deleteProject(safe.id);navigate('/projects',{replace:true,state:{notice:`${safe.projectName} was deleted.`}})}catch(reason){setDeleteError(reason instanceof Error?reason.message:'Unable to delete the project');setDeleting(false)}}
+ const confirmDelete=async()=>{setDeleting(true);setDeleteError('');try{await deleteProject(safe.id);navigate('/home',{replace:true,state:{notice:`${safe.projectName} was deleted.`}})}catch(reason){setDeleteError(reason instanceof Error?reason.message:'Unable to delete the project');setDeleting(false)}}
  return <div className="knowledge-record">
   <header className="knowledge-record-header"><div><p className="eyebrow">Sources</p><h2>Evidence and editing workbench.</h2><p>Uploaded material, factual review, Team input and Folion's draft stay visibly separate until you approve them.</p></div><span className={`knowledge-readiness ${status==='Ready for Studio'?'ready':''}`}>{status==='Ready for Studio'?<ShieldCheck/>:<AlertCircle/>}{status}</span></header>
 

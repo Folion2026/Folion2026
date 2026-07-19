@@ -338,6 +338,21 @@ async function markProjectNarrativesStale(workspaceId: string, projectId: string
   if (error) throw error;
 }
 
+async function deleteApprovedTemporarySources(workspaceId:string,projectId:string,userId:string){
+  const {data:sources,error}=await admin.from("assets").select("id,storage_path").eq("workspace_id",workspaceId).eq("project_id",projectId).eq("retention_kind","temporary_source").in("lifecycle_status",["pending_review","approved"]);
+  if(error)throw error;
+  for(const source of sources||[]){
+    const {data:jobs,error:jobError}=await admin.from("ingestion_jobs").select("id,status").eq("workspace_id",workspaceId).eq("project_id",projectId).eq("source_asset_id",source.id).order("created_at",{ascending:false});if(jobError)throw jobError;
+    if((jobs||[]).some(job=>["queued","extracting_text","analysing","validating"].includes(job.status)))continue;
+    const jobIds=(jobs||[]).map(job=>job.id);if(!jobIds.length)continue;
+    const {count,error:reviewError}=await admin.from("knowledge_items").select("*",{count:"exact",head:true}).eq("workspace_id",workspaceId).eq("project_id",projectId).in("extraction_job_id",jobIds).eq("status","review_needed");if(reviewError)throw reviewError;if(count)continue;
+    const {error:approveError}=await admin.from("assets").update({lifecycle_status:"approved"}).eq("workspace_id",workspaceId).eq("project_id",projectId).eq("id",source.id);if(approveError)throw approveError;
+    if(source.storage_path){const {error:removeError}=await admin.storage.from("project-assets").remove([source.storage_path]);if(removeError)throw removeError}
+    const deletedAt=new Date().toISOString();const {error:updateError}=await admin.from("assets").update({storage_path:null,lifecycle_status:"deleted",source_deleted_at:deletedAt}).eq("workspace_id",workspaceId).eq("project_id",projectId).eq("id",source.id);if(updateError)throw updateError;
+    await audit(workspaceId,userId,"source.binary_deleted","asset",source.id,{projectId,approvedKnowledgePreserved:true});
+  }
+}
+
 function projectKnowledgeFingerprint(project: Json) {
   const knowledge = (project.knowledge || {}) as Json;
   return JSON.stringify({
@@ -365,6 +380,7 @@ function assetRow(
   storagePath?: string,
 ) {
   const durablePath = storagePath || asset.storagePath || null;
+  const temporarySource = asset.retentionKind === "temporary_source";
   return {
     workspace_id: workspaceId,
     project_id: projectId,
@@ -390,6 +406,10 @@ function assetRow(
     uploaded_category: String(asset.uploadedCategory || asset.type || ""),
     is_primary: Boolean(asset.isPrimary),
     is_selected_for_gallery: asset.isSelectedForGallery !== false,
+    retention_kind: temporarySource ? "temporary_source" : "durable",
+    lifecycle_status: temporarySource
+      ? String(asset.lifecycleStatus || "uploaded")
+      : null,
     created_by: userId,
   };
 }
@@ -473,17 +493,28 @@ async function saveProject(workspaceId: string, user: User, project: Json) {
   }
   const { data: existingAssets, error: existingAssetsError } = await admin
     .from("assets")
-    .select("id,created_by")
+    .select("id,created_by,retention_kind,lifecycle_status,source_deleted_at,storage_path")
     .eq("workspace_id", workspaceId)
     .eq("project_id", id);
   if (existingAssetsError) throw existingAssetsError;
   if (assets.length) {
-    const creators = new Map(
-      (existingAssets || []).map((asset) => [asset.id, asset.created_by]),
+    const existingById = new Map(
+      (existingAssets || []).map((asset) => [asset.id, asset]),
     );
     const rows = assets.map((asset) => {
       const row = assetRow(workspaceId, id, user.id, asset);
-      return { ...row, created_by: creators.get(row.id) || user.id };
+      const existingAsset = existingById.get(row.id);
+      if (existingAsset?.lifecycle_status === "deleted") {
+        return {
+          ...row,
+          created_by: existingAsset.created_by,
+          storage_path: null,
+          retention_kind: existingAsset.retention_kind,
+          lifecycle_status: "deleted",
+          source_deleted_at: existingAsset.source_deleted_at,
+        };
+      }
+      return { ...row, created_by: existingAsset?.created_by || user.id };
     });
     const { error: assetError } = await admin
       .from("assets")
@@ -877,6 +908,7 @@ async function bootstrap(user: User) {
     { data: approvedItems, error: approvedItemError },
     { data: approvedSources, error: approvedSourceError },
     { data: approvedNarratives, error: approvedNarrativeError },
+    { data: externalLinks, error: externalLinkError },
   ] = await Promise.all([
     admin
       .from("projects")
@@ -907,6 +939,7 @@ async function bootstrap(user: User) {
       .select("*")
       .eq("workspace_id", workspace.id)
       .eq("status", "approved"),
+    admin.from("project_external_links").select("*").eq("workspace_id", workspace.id).order("created_at"),
   ]);
   if (
     projectError ||
@@ -915,7 +948,7 @@ async function bootstrap(user: User) {
     assetError ||
     approvedItemError ||
     approvedSourceError ||
-    approvedNarrativeError
+    approvedNarrativeError || externalLinkError
   )
     throw (
       projectError ||
@@ -924,7 +957,7 @@ async function bootstrap(user: User) {
       assetError ||
       approvedItemError ||
       approvedSourceError ||
-      approvedNarrativeError
+      approvedNarrativeError || externalLinkError
     );
   const peopleById = new Map((people || []).map((person) => [person.id, person]));
   const signedUrls = new Map<string, string>();
@@ -995,6 +1028,7 @@ async function bootstrap(user: User) {
           basisType: item.basis_type,
           approvedAt: item.approved_at,
         })),
+      externalLinks: (externalLinks || []).filter(item=>item.project_id===row.id).map(item=>({id:item.id,projectId:item.project_id,label:item.label,url:item.url,provider:item.provider,isPrimary:item.is_primary})),
       assets: projectAssets.map((item) => ({
         id: item.id,
         type: item.type,
@@ -1012,6 +1046,9 @@ async function bootstrap(user: User) {
         uploadedCategory: item.uploaded_category,
         isPrimary: item.is_primary,
         isSelectedForGallery: item.is_selected_for_gallery,
+        retentionKind: item.retention_kind,
+        lifecycleStatus: item.lifecycle_status || undefined,
+        sourceDeletedAt: item.source_deleted_at || undefined,
       })),
     };
   });
@@ -1545,6 +1582,21 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     }); */
   }
   const projectMatch = path.match(/^\/api\/v1\/projects\/([^/]+)$/);
+  const projectLinksMatch = path.match(/^\/api\/v1\/projects\/([^/]+)\/external-links$/);
+  if (req.method === "PUT" && projectLinksMatch) {
+    const projectId = decodeURIComponent(projectLinksMatch[1]);
+    const input = await body(req), links = Array.isArray(input.links) ? input.links as Json[] : [];
+    const {workspace}=await projectAccess(user,projectId,["owner","editor"]);
+    if (links.filter(link=>Boolean(link.isPrimary)).length>1) return fail(res,400,"Only one project folder link can be primary.");
+    const providers=new Set(["SharePoint","OneDrive","Google Drive","Dropbox","Box","Other"]);
+    const rows=links.map(link=>{const url=String(link.url||"").trim();try{const parsed=new URL(url);if(!["http:","https:"].includes(parsed.protocol))throw new Error()}catch{return null}return {id:String(link.id||crypto.randomUUID()),workspace_id:workspace.id,project_id:projectId,label:String(link.label||"Project folder").trim()||"Project folder",url,provider:providers.has(String(link.provider))?String(link.provider):"Other",is_primary:Boolean(link.isPrimary),created_by:user.id}});
+    if(rows.some(row=>!row))return fail(res,400,"Every external project link needs a valid http or https URL.");
+    const validRows=rows.filter((row):row is NonNullable<typeof row>=>Boolean(row));
+    const {error:deleteError}=await admin.from("project_external_links").delete().eq("workspace_id",workspace.id).eq("project_id",projectId);if(deleteError)throw deleteError;
+    if(validRows.length){const {error}=await admin.from("project_external_links").insert(validRows);if(error)throw error}
+    await audit(workspace.id,user.id,"project.external_links_updated","project",projectId,{count:validRows.length});
+    return reply(res,200,{links:validRows.map(row=>({id:row.id,projectId,label:row.label,url:row.url,provider:row.provider,isPrimary:row.is_primary}))});
+  }
   if (req.method === "POST" && path === "/api/v1/projects") {
     const input = await body(req);
     const workspaceId = String(input.workspaceId || "");
@@ -1601,6 +1653,12 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       return fail(res, 422, "Add a project description, challenge, opportunity, response, outcome, source-derived summary or Team Input before marking Ready for Studio.");
     if (await currentReviewNeedsRefresh(workspace.id, projectId))
       return fail(res, 409, "Project knowledge has changed since this review was generated. Use Refresh Review before marking Ready for Studio.");
+    const [{count:pendingFacts,error:pendingFactError},{count:pendingNarratives,error:pendingNarrativeError}]=await Promise.all([
+      admin.from("knowledge_items").select("*",{count:"exact",head:true}).eq("workspace_id",workspace.id).eq("project_id",projectId).eq("status","review_needed"),
+      admin.from("narrative_sections").select("*",{count:"exact",head:true}).eq("workspace_id",workspace.id).eq("project_id",projectId).eq("status","draft"),
+    ]);
+    if(pendingFactError||pendingNarrativeError)throw pendingFactError||pendingNarrativeError;
+    if(pendingFacts||pendingNarratives)return fail(res,409,"Review every extracted candidate and narrative before marking Ready for Studio. Accept, edit and approve, or reject each item.");
     const { error: updateError } = await admin
       .from("projects")
       .update({
@@ -1616,6 +1674,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       .eq("workspace_id", workspace.id)
       .eq("id", projectId);
     if (updateError) throw updateError;
+    await deleteApprovedTemporarySources(workspace.id,projectId,user.id);
     await audit(
       workspace.id,
       user.id,
@@ -1899,6 +1958,8 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       }
       throw jobError;
     }
+    const { error: lifecycleError } = await admin.from("assets").update({ lifecycle_status: "analysing" }).eq("workspace_id", workspace.id).eq("project_id", projectId).eq("id", assetId).eq("retention_kind", "temporary_source");
+    if (lifecycleError) throw lifecycleError;
     await audit(
       workspace.id,
       user.id,
